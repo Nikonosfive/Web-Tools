@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>世界史相関図タイムライン（改良版）</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .bar { fill-opacity: 0.7; }
+    .label {
+      font-weight: bold;
+      text-anchor: middle;
+      fill: black;
+      stroke: white;
+      stroke-width: 2px;
+      paint-order: stroke;
+    }
+    .year-label { font-size: 10px; text-anchor: middle; }
+    .war-line { stroke: gray; stroke-width: 1.5px; fill: none; marker-end: url(#arrow); }
+    .war-label { font-size: 10px; fill: black; text-anchor: start; }
+    .tooltip {
+      position: absolute;
+      text-align: left;
+      padding: 6px;
+      font-size: 12px;
+      background: rgba(255,255,255,0.9);
+      border: 1px solid #ccc;
+      pointer-events: none;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="tooltip" class="tooltip" style="display: none;"></div>
+  <svg></svg>
+  <script>
+    const nations = [
+      { name: "北宋", id: 8, displayId: 1, color: "pink", start: 960, end: 1127, note: "中国・宋王朝の北方時代" },
+      { name: "南宋", id: 9, displayId: 1, color: "pink", start: 1127, end: 1276, note: "中国・宋王朝の南方時代" },
+      { name: "明", id: 12, displayId: 1, color: "navy", start: 1368, end: 1644, note: "漢民族による王朝" },
+      { name: "西夏", id: 7, displayId: 2, color: "yellow", start: 1038, end: 1227, note: "タングート族が建国した王朝" },
+      { name: "金", id: 11, displayId: 3, color: "#dddd", start: 1115, end: 1234, note: "女真族による王朝" },
+      { name: "遼", id: 10, displayId: 4, color: "darkgreen", start: 916, end: 1125, note: "契丹族による王朝" },
+      { name: "モンゴル帝国", id: 1, displayId: 5, color: "gold", start: 1206, end: 1388, note: "チンギス・ハンが建国" },
+      { name: "ホラズム・シャー朝", id: 6, displayId: 6, color: "orange", start: 1077, end: 1231, note: "中央アジアの王朝" },
+      { name: "セルジューク朝", id: 5, displayId: 7, color: "black", start: 1038, end: 1194, note: "トルコ系イスラム王朝" },
+      { name: "東ローマ帝国→ビザンツ帝国", id: 21, displayId: 8, color: "darkblue", start: 395, end: 1453, note: "ローマ帝国の東半分" },
+      { name: "ブワイフ朝", id: 4, displayId: 9, color: "red", start: 932, end: 1062, note: "バグダードを支配" },
+      { name: "*オスマン帝国", id: 17, displayId: 10, color: "black", start: 1300, end: 1922, note: "トルコ系大帝国" },
+      { name: "*カラハン朝*", id: 20, displayId: 11, color: "orange", start: 940, end: 1160, note: "中央アジアのイスラム王朝" },
+      { name: "ティムールの帝国", id: 26, displayId: 11, color: "pink", start: 1370, end: 1507, note: "1469年以降分裂" } ,
+      { name: "サーマーン朝", id: 19, displayId: 12, color: "skyblue", start: 875, end: 999, note: "ペルシャ系の王朝" },
+      { name: "ガズナ朝", id: 18, displayId: 13, color: "gold", start: 956, end: 1187, note: "アフガニスタンを中心に展開" },
+      { name: "ゴール朝", id: 2, displayId: 14, color: "blue", start: 1148, end: 1215, note: "ガズナ朝の後継" },
+      { name: "奴隷王朝", id: 3, displayId: 15, color: "green", start: 1206, end: 1290, note: "デリー・スルタン朝の第一王朝" },
+      { name: "ハルジー朝", id: 22, displayId: 15, color: "green", start: 1290, end: 1320, note: "デリー・スルタン朝の第二王朝" },
+      { name: "トゥグルク朝", id: 23, displayId: 15, color: "green", start: 1320, end: 1414, note: "デリー・スルタン朝の第三王朝" },
+      { name: "サイイド朝", id: 24, displayId: 15, color: "green", start: 1414, end: 1451, note: "デリー・スルタン朝の第四王朝" },
+      { name: "ローディー朝", id: 25, displayId: 15, color: "green", start: 1451, end: 1526, note: "デリー・スルタン朝の第五王朝 アフガン系" },
+      { name: "マムルーク朝", id: 16, displayId: 16, color: "red", start: 1250, end: 1517, note: "エジプトの軍人王朝" },
+      { name: "アイユーブ朝", id: 14, displayId: 17, color: "skyblue", start: 1169, end: 1250, note: "サラディンが建国" },
+      { name: "ファーティマ朝", id: 15, displayId: 16, color: "gold", start: 909, end: 1171, note: "シーア派王朝" },
+      { name: "ウマイヤ朝", id: 27, displayId: 10, color: "purple", start: 661, end: 750, note: "アラブ帝国" },
+      { name: "アッバース朝", id: 13, displayId: 10, color: "gray", start: 750, end: 1258, note: "イスラム帝国の中心王朝" }]; 
+    const barHeight = 20;
+    const wars = [
+      { year: 1062, from: 4, to: 5, note: "滅亡" },
+      { year: 1194, from: 5, to: 6, note: "滅亡" },
+      { year: 1215, from: 2, to: 3, note: "滅亡" },
+      { year: 1231, from: 6, to: 1, note: "滅亡" },
+      { year: 1388, from: 1, to: 12, note: "滅亡" },
+      { year: 1276, from: 9, to: 1, note: "滅亡" },
+      { year: 1234, from: 9, to: 11, note: "攻撃" },
+      { year: 1234, from: 11, to: 1, note: "滅亡" },
+      { year: 1227, from: 7, to: 1, note: "滅亡" },
+      { year: 1125, from: 10, to: 11, note: "滅亡" },
+      { year: 1127, from: 11, to: 8, note: "滅亡" },
+      { year: 1044, from: 7, to: 8, note: "慶暦の和約" },
+      { year: 946, from: 4, to: 13, note: "バグダード入城" },
+      { year: 1258, from: 13, to: 1, note: "滅亡" },
+      { year: 1171, from: 15, to: 14, note: "滅亡" },
+      { year: 1250, from: 14, to: 16, note: "クーデター" },
+      { year: 1517, from: 16, to: 17, note: "滅亡" },
+      { year: 1187, from: 2, to: 18, note: "滅亡" },
+      { year: 1038, from: 18, to: 5, note: "イランで自立" },
+      { year: 875, from: 13, to: 19, note: "自立" },
+      { year: 999, from: 19, to: 20, note: "滅亡" },
+      { year: 956, from: 19, to: 18, note: "自立" },
+      { year: 1077, from: 5, to: 6, note: "自立" },
+      { year: 1398, from: 26, to: 23, note: "崩壊させる" }
+    ]; 
+
+    const svg = d3.select("svg");
+    const tooltip = d3.select("#tooltip");
+    const g = svg.append("g");
+
+    const zoom = d3.zoom().scaleExtent([0.5, 5])
+      .on("zoom", event => g.attr("transform", event.transform));
+    svg.call(zoom);
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const years = nations.flatMap(d => [d.start, d.end]).concat(wars.map(w => w.year));
+    const minYear = Math.min(...years) - 10;
+    const maxYear = Math.max(...years) + 10;
+
+    const x = d3.scaleLinear().domain([minYear, maxYear]).range([80, width - 80]);
+    const y = d3.scalePoint()
+      .domain([...new Set(nations.map(d => d.displayId))])
+      .range([50, height - 50])
+      .padding(1.2);
+
+    g.append("defs").append("marker")
+      .attr("id", "arrow")
+      .attr("viewBox", "0 -5 10 10")
+      .attr("refX", 5).attr("refY", 0)
+      .attr("markerWidth", 5)
+      .attr("markerHeight", 5)
+      .attr("orient", "auto")
+      .append("path")
+      .attr("d", "M0,-5L10,0L0,5")
+      .attr("fill", "gray");
+
+    const warLayer = g.append("g");
+    const labelLayer = g.append("g");
+
+    labelLayer.selectAll("rect")
+      .data(nations)
+      .enter()
+      .append("rect")
+      .attr("x", d => x(d.start))
+      .attr("y", d => y(d.displayId) - barHeight / 2)
+      .attr("width", d => x(d.end) - x(d.start))
+      .attr("height", barHeight)
+      .attr("fill", d => d.color)
+      .attr("class", "bar")
+      .on("mouseover", (event, d) => {
+        tooltip.style("display", "block")
+          .html(`<strong>${d.name}</strong><br>建国年: ${d.start}<br>滅亡年: ${d.end}${d.note ? `<br>備考: ${d.note}` : ''}`)
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY + 10) + "px");
+      })
+      .on("mouseout", () => tooltip.style("display", "none"));
+
+    labelLayer.selectAll("text.label")
+      .data(nations)
+      .enter()
+      .append("text")
+      .attr("x", d => (x(d.start) + x(d.end)) / 2)
+      .attr("y", d => y(d.displayId) + 5)
+      .attr("class", "label")
+      .text(d => d.name);
+
+    labelLayer.selectAll("text.year-label-start")
+      .data(nations)
+      .enter()
+      .append("text")
+      .attr("x", d => x(d.start))
+      .attr("y", d => y(d.displayId) - barHeight / 2 - 5)
+      .attr("class", "year-label")
+      .text(d => d.start);
+
+    labelLayer.selectAll("text.year-label-end")
+      .data(nations)
+      .enter()
+      .append("text")
+      .attr("x", d => x(d.end))
+      .attr("y", d => y(d.displayId) - barHeight / 2 - 5)
+      .attr("class", "year-label")
+      .text(d => d.end);
+
+    warLayer.selectAll("line.war")
+      .data(wars)
+      .enter()
+      .append("line")
+      .attr("x1", d => x(d.year))
+      .attr("x2", d => x(d.year))
+      .attr("y1", d => {
+        const from = nations.find(n => n.id === d.from);
+        const to = nations.find(n => n.id === d.to);
+        const yFrom = y(from.displayId);
+        const yTo = y(to.displayId);
+        return yFrom < yTo ? yFrom + barHeight / 2 : yFrom - barHeight / 2;
+      })
+      .attr("y2", d => {
+        const from = nations.find(n => n.id === d.from);
+        const to = nations.find(n => n.id === d.to);
+        const yFrom = y(from.displayId);
+        const yTo = y(to.displayId);
+        return yFrom < yTo ? yTo - barHeight / 2 : yTo + barHeight / 2;
+      })
+      .attr("class", "war-line");
+
+    const warCountByYear = {};
+    wars.forEach(w => {
+      if (!warCountByYear[w.year]) warCountByYear[w.year] = 0;
+      warCountByYear[w.year]++;
+      w.offsetIndex = warCountByYear[w.year];
+    });
+
+    labelLayer.selectAll("text.war-label")
+      .data(wars)
+      .enter()
+      .append("text")
+      .attr("x", d => x(d.year) + 5)
+      .attr("y", d => {
+        const from = nations.find(n => n.id === d.from);
+        const to = nations.find(n => n.id === d.to);
+        const yFrom = y(from.displayId);
+        const yTo = y(to.displayId);
+        const offset = (d.offsetIndex - 1) * 14;
+        return ((yFrom + yTo) / 2) + (yFrom < yTo ? -10 : 10) + offset;
+      })
+      .attr("class", "war-label")
+      .text(d => `${d.year}: ${d.note}`);
+
+    window.addEventListener("resize", () => location.reload());
+  </script>
+</body>
+</html>
