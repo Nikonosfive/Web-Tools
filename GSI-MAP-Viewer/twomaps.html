@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地理院地図と航空写真の連動表示</title>
+    <script>
+      let gsiMap, photoMap;
+
+// 初期座標とズームレベル
+const initialLat = 35.362222;
+const initialLng = 138.731388;
+const initialZoom = 13;
+
+function initMaps() {
+    // 地理院地図の設定
+    gsiMap = new L.Map('gsiMap').setView([initialLat, initialLng], initialZoom);
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+        attribution: "地理院地図"
+    }).addTo(gsiMap);
+
+    // 航空写真の設定
+    photoMap = new L.Map('photoMap').setView([initialLat, initialLng], initialZoom);
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/ort/{z}/{x}/{y}.jpg', {
+        attribution: "地理院地図 航空写真"
+    }).addTo(photoMap);
+
+    // 地理院地図の移動イベントにリスナーを追加
+    gsiMap.on('moveend', updatePhotoMap);
+
+    // 航空写真の移動イベントにリスナーを追加
+    photoMap.on('moveend', updateGsiMap);
+}
+
+function updatePhotoMap() {
+    const center = gsiMap.getCenter();
+    const lat = center.lat;
+    const lng = center.lng;
+    const zoom = gsiMap.getZoom();
+
+    photoMap.setView([lat, lng], zoom);
+}
+
+function updateGsiMap() {
+    const center = photoMap.getCenter();
+    const lat = center.lat;
+    const lng = center.lng();
+    const zoom = photoMap.getZoom();
+
+    gsiMap.setView([lat, lng], zoom);
+}
+
+// ページ読み込み時に地図を初期化
+window.onload = initMaps;
+  </script>
+    <style>
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #gsiMap, #photoMap {
+            flex: 1;
+        }
+        #gsiMap {
+            border-right: 2px solid #ccc;
+        }
+        .map {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+<body>
+    <div id="container">
+        <div id="gsiMap" class="map"></div>
+        <div id="photoMap" class="map"></div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+</body>
+</html>
