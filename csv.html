@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Easy CSV</title>
+
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 1.5rem;
+      background: #f4f4f4;
+      color: #333;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .toolbar {
+      margin-bottom: 0.5rem;
+      display: block;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .file-list {
+      margin-top: 1rem;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: calc(100vw - 3rem);
+      margin-bottom: 0;
+    }
+
+    td,
+    th {
+      border: 0;
+      padding: 0;
+      margin: 0;
+    }
+
+    input {
+      color: #333;
+      width: calc(100% - 3rem);
+      padding: 0.5rem 1rem;
+      border: 1px solid #d2d2d2;
+      border-radius: 3px;
+      background: #f7f7f7;
+      font-size: 1em;
+      line-height: 1.5;
+      margin: 0.1rem;
+    }
+
+    input::placeholder {
+      color: #999;
+    }
+
+    button {
+      padding: 0.3rem 1rem;
+      cursor: pointer;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      border-radius: 4px;
+      margin: 5px;
+      height: 2rem;
+      line-heght: 2rem;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    .file-name-input {
+      border: 1px solid #ccc;
+      padding: 4px;
+    }
+
+    .dragging {
+      opacity: 0.5;
+    }
+
+    .file-name-input {
+      max-width: 6rem;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <h1>Easy CSV</h1>
+  </div>
+  <div id="topPage">
+    <button id="newFileBtn">新規作成</button>
+    <button id="loadFileBtn">読み込み</button>
+    <h2>マイライブラリー</h2>
+    <div class="file-list" id="fileList"></div>
+  </div>
+
+  <div id="editorPage" class="hidden">
+    <div class="toolbar">
+      <button id="newBtn">新規作成</button>
+      <button id="reloadBtn">読み込み</button>
+
+      <button id="backBtn">🏠️</button>
+      <input id="fileNameInput" class="file-name-input" />
+      <button id="saveBtn">ダウンロード</button>
+      <a>文字サイズ</a>
+      <button id="increaseFontBtn">+</button>
+      <button id="decreaseFontBtn">−</button>
+      <button id="addColumnBtn">列を追加</button>
+      <select id="sortColumnSelect"></select>
+      <select id="sortOrderSelect">
+        <option value="asc">昇順</option>
+        <option value="desc">降順</option>
+      </select>
+      <button id="sortBtn">並べ替え</button>
+    </div>
+    <div id="addRow"></div>
+    <button id="addBtn">追加</button>
+    <table id="csvTable"></table>
+  </div>
+
+  <input type="file" id="fileInput" class="hidden" accept=".csv,.txt">
+
+  <script>
+    let db;
+    let currentFileName = '';
+    let csvData = [];
+    let columns = 0;
+    let fontSize = 16;
+    const topPage = document.getElementById('topPage');
+    const editorPage = document.getElementById('editorPage');
+    const fileList = document.getElementById('fileList');
+    const csvTable = document.getElementById('csvTable');
+    const addRow = document.getElementById('addRow');
+    const fileInput = document.getElementById('fileInput');
+    const sortColumnSelect = document.getElementById('sortColumnSelect');
+    const sortOrderSelect = document.getElementById('sortOrderSelect');
+    const fileNameInput = document.getElementById('fileNameInput');
+    window.onload = () => {
+      initDB();
+    };
+
+    function initDB() {
+      const request = indexedDB.open('CSVEditorDB', 1);
+      request.onupgradeneeded = (e) => {
+        db = e.target.result;
+        db.createObjectStore('files', {
+          keyPath: 'name'
+        });
+      };
+      request.onsuccess = (e) => {
+        db = e.target.result;
+        loadFileList();
+      };
+    }
+
+    function autoSave() {
+      const transaction = db.transaction(['files'], 'readwrite');
+      const store = transaction.objectStore('files');
+      store.put({
+        name: currentFileName,
+        data: csvData,
+        columns
+      });
+    }
+
+    function saveFileAsDownload() {
+      let csvContent = csvData.map(e => e.join(",")).join("\n");
+      let blob = new Blob([csvContent], {
+        type: 'text/csv;charset=utf-8;'
+      });
+      let url = URL.createObjectURL(blob);
+      let a = document.createElement('a');
+      a.href = url;
+      a.download = currentFileName.endsWith('.csv') ? currentFileName : currentFileName + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function loadFileList() {
+      if (!db) return;
+      const transaction = db.transaction(['files'], 'readonly');
+      const store = transaction.objectStore('files');
+      const request = store.getAll();
+      request.onsuccess = () => {
+        fileList.innerHTML = '';
+        request.result.forEach(file => {
+          const div = document.createElement('div');
+          div.innerHTML = `
+                        <span>${file.name}</span>
+                        <button onclick="loadFile('${file.name}')">開く</button>
+                        <button onclick="renameFile('${file.name}')">名前変更</button>
+                        <button onclick="deleteFile('${file.name}')">🗑️</button>
+                    `;
+          fileList.appendChild(div);
+        });
+      };
+    }
+
+    function loadFile(name) {
+      const transaction = db.transaction(['files'], 'readonly');
+      const store = transaction.objectStore('files');
+      const request = store.get(name);
+      request.onsuccess = () => {
+        currentFileName = name;
+        fileNameInput.value = name;
+        csvData = request.result.data;
+        columns = request.result.columns;
+        switchPage('editor');
+        renderEditor();
+      };
+    }
+
+    function deleteFile(name) {
+      const transaction = db.transaction(['files'], 'readwrite');
+      const store = transaction.objectStore('files');
+      store.delete(name);
+      loadFileList();
+    }
+
+    function renameFile(name) {
+      const newName = prompt('新しい名前を入力してください', name);
+      if (newName && newName !== name) {
+        loadFile(name);
+        deleteFile(name);
+        currentFileName = newName;
+        fileNameInput.value = newName;
+        autoSave();
+      }
+    }
+    document.getElementById('newFileBtn').onclick = () => {
+      const col = parseInt(prompt('項目数を入力してください'), 10);
+      if (col > 0) {
+        columns = col;
+        csvData = [];
+        currentFileName = prompt('ファイル名を入力してください');
+        fileNameInput.value = currentFileName;
+        switchPage('editor');
+        renderEditor();
+      }
+    };
+    document.getElementById('loadFileBtn').onclick = () => fileInput.click();
+    document.getElementById('reloadBtn').onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const lines = reader.result.split('\n').filter(line => line);
+          csvData = lines.map(line => line.split(','));
+          columns = csvData[0].length;
+          currentFileName = file.name;
+          fileNameInput.value = file.name;
+          switchPage('editor');
+          renderEditor();
+        };
+        reader.readAsText(file);
+      }
+    };
+    document.getElementById('newBtn').onclick = () => {
+      if (confirm('現在のデータは保存されません。新規作成しますか？')) {
+        const col = parseInt(prompt('項目数を入力してください'), 10);
+        if (col > 0) {
+          columns = col;
+          csvData = [];
+          currentFileName = prompt('ファイル名を入力してください');
+          fileNameInput.value = currentFileName;
+          renderEditor();
+        }
+      }
+    };
+    document.getElementById('addColumnBtn').onclick = () => {
+      columns++;
+      csvData.forEach(row => row.push(''));
+      renderEditor();
+    };
+    fileNameInput.onchange = () => {
+      if (fileNameInput.value && fileNameInput.value !== currentFileName) {
+        deleteFile(currentFileName);
+        currentFileName = fileNameInput.value;
+        autoSave();
+      }
+    };
+    document.getElementById('saveBtn').onclick = saveFileAsDownload;
+    document.getElementById('backBtn').onclick = () => {
+      switchPage('top');
+    };
+    document.getElementById('increaseFontBtn').onclick = () => {
+      fontSize += 2;
+      renderEditor();
+    };
+    document.getElementById('decreaseFontBtn').onclick = () => {
+      fontSize = Math.max(8, fontSize - 2);
+      renderEditor();
+    };
+    document.getElementById('sortBtn').onclick = () => {
+      const col = parseInt(sortColumnSelect.value, 10);
+      const order = sortOrderSelect.value;
+      csvData.sort((a, b) => {
+        if (order === 'asc') return (a[col] || '').localeCompare(b[col] || '', 'ja');
+        else return (b[col] || '').localeCompare(a[col] || '', 'ja');
+      });
+      autoSave();
+      renderEditor();
+    };
+
+    function switchPage(page) {
+      if (page === 'editor') {
+        topPage.classList.add('hidden');
+        editorPage.classList.remove('hidden');
+      } else {
+        topPage.classList.remove('hidden');
+        editorPage.classList.add('hidden');
+        loadFileList();
+      }
+    }
+
+    function renderEditor() {
+      csvTable.innerHTML = '';
+      csvData.forEach((row, rowIndex) => {
+        const tr = document.createElement('tr');
+        row.forEach((cell, colIndex) => {
+          const td = document.createElement('td');
+          const input = document.createElement('input');
+          input.value = cell;
+          input.style.fontSize = fontSize + 'px';
+          input.onchange = () => {
+            csvData[rowIndex][colIndex] = input.value;
+            autoSave();
+          };
+          input.setAttribute('draggable', 'true');
+          input.ondragstart = (e) => {
+            e.dataTransfer.setData('text/plain', colIndex);
+            e.target.classList.add('dragging');
+          };
+          input.ondragend = (e) => e.target.classList.remove('dragging');
+          input.ondragover = (e) => e.preventDefault();
+          input.ondrop = (e) => {
+            e.preventDefault();
+            const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+            csvData.forEach(row => {
+              const temp = row[fromIndex];
+              row[fromIndex] = row[colIndex];
+              row[colIndex] = temp;
+            });
+            autoSave();
+            renderEditor();
+          };
+          td.appendChild(input);
+          tr.appendChild(td);
+        });
+        const delTd = document.createElement('td');
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑️';
+        delBtn.onclick = () => {
+          csvData.splice(rowIndex, 1);
+          autoSave();
+          renderEditor();
+        };
+        delTd.appendChild(delBtn);
+        tr.appendChild(delTd);
+        csvTable.appendChild(tr);
+      });
+      addRow.innerHTML = '';
+      const inputs = [];
+      for (let i = 0; i < columns; i++) {
+        const input = document.createElement('input');
+        input.style.fontSize = fontSize + 'px';
+        input.placeholder = `項目${i + 1}`;
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            if (inputs.every(input => input.value.trim() !== '')) {
+              document.getElementById('addBtn').click();
+            }
+          }
+        });
+        addRow.appendChild(input);
+        inputs.push(input);
+      }
+      sortColumnSelect.innerHTML = '';
+      for (let i = 0; i < columns; i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = `${i + 1}列目`;
+        sortColumnSelect.appendChild(option);
+      }
+      document.getElementById('addBtn').onclick = () => {
+        const newRow = inputs.map(input => input.value.trim() === '' ? ' ' : input.value.trim());
+        const exists = csvData.some(row => row[0] === newRow[0]);
+        if (exists && !confirm('同じ先頭項目の行があります。続行しますか？')) return;
+        csvData.push(newRow);
+        autoSave();
+        renderEditor();
+        inputs.forEach(input => input.value = '');
+        inputs[0].focus();
+      };
+    }
+  </script>
+</body>
+
+</html>
