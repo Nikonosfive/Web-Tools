@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>清栄祭 2024 西大和学園 文化祭</title>
+    <meta name="description" content="西大和学園の文化祭「清榮祭」の2024年度のウェブサイトが公開されました！">
+    <meta name="keywords" content="seieisai, 清榮祭, せいえいさい, 西大和学園, 文化祭, 清栄祭">
+    <link rel="icon" href="https://seieisai38.info/images/Nishiyamato.png" alt="Nishiyamato Logo">
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-BC97BY14JT"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+    
+      gtag('config', 'G-BC97BY14JT');
+    </script>
+</head>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: black;
+            overflow: hidden;
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-position: center;
+            transition: background-image 1s ease-in-out;
+        }
+
+        #fadeImage, #content {
+            position: absolute;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        #fadeImage {
+            width: 100%;
+            object-fit: cover;
+        }
+
+        #content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #ffffff;
+            font-family: Georgia, serif;
+            padding: 3rem;
+            padding-top: 100px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+        }
+      
+        #content a {
+            color: #ffffff;      
+        }
+      
+        #content a:hover {
+            color: #dddddd;      
+        }
+
+        #content h1 {
+            font-size: 2.5rem;
+        }
+
+        #content p {
+            font-size: 1.5rem;
+            margin-top: 0;
+        }
+      
+        .url2 {
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <img id="fadeImage" src="" alt="フェードイン画像">
+    <div id="content">
+        <div>
+            <p>西大和学園中学校・高等学校</p>
+            <h1>令和六年度清榮祭<br>公式ページ公開</h1>
+            <p class="url"><a href="https://seieisai38.info/top.php">アクセスする</a></p>
+            <p class="url"><a href="https://sites.google.com/view/seieisai37" class="url2">2023年度トップはこちら</a></p>
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() {
+            const fadeImage = document.getElementById('fadeImage');
+            const content = document.getElementById('content');
+
+            // 画像リストの定義
+            const mobileImages = [
+                'https://site.tadr-tech.info/wrap_sp1.png', // モバイル用画像1
+                'https://site.tadr-tech.info/wrap_sp.png'  // モバイル用画像2
+            ];
+
+            const desktopImages = [
+                'https://site.tadr-tech.info/wrap_pc1.png', // デスクトップ用画像1
+                'https://site.tadr-tech.info/wrap_pc.png'  // デスクトップ用画像2
+            ];
+
+            // デバイスの種類を判定（画面幅が768px以下をモバイルとする）
+            const isMobile = window.innerWidth <= 768;
+
+            // 表示する画像リストを選択
+            const images = isMobile ? mobileImages : desktopImages;
+
+            // 現在の画像インデックス
+            let currentImage = 0;
+
+            // 画像をフェードインさせる関数
+            function fadeInImage() {
+                fadeImage.style.opacity = 1;
+            }
+
+            // 画像をフェードアウトさせる関数
+            function fadeOutImage() {
+                fadeImage.style.opacity = 0;
+            }
+
+            // 最初の画像を設定してフェードイン
+            fadeImage.src = images[currentImage];
+            fadeInImage();
+
+            // 2.5秒後に2番目の画像に切り替え
+            setTimeout(() => {
+                fadeOutImage();
+
+                // フェードアウト完了後に画像を切り替えてフェードイン
+                setTimeout(() => {
+                    currentImage = 1; // 次の画像にインデックスを更新
+                    fadeImage.src = images[currentImage];
+                    fadeInImage();
+                }, 000); // フェードアウトの時間（0.5秒）を待つ
+            }, 2500); // 最初の画像表示時間（2.5秒）
+
+            // 5.5秒後に背景画像を表示し、画面を明転してコンテンツを表示
+            setTimeout(() => {
+                fadeOutImage();
+
+                // フェードアウト完了後に背景画像を設定し、コンテンツを表示
+                setTimeout(() => {
+                    document.body.style.backgroundImage = "url('https://site.tadr-tech.info/bug.png')";
+                    content.style.opacity = 1;
+                    document.body.style.backgroundColor = 'black';
+                }, 500); // フェードアウトの時間（0.5秒）を待つ
+            }, 5000); // 背景画像の表示は2番目の画像フェードアウト後
+        }
+    </script>
+</body>
+</html>
