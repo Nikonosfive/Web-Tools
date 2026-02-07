@@ -3,9 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>暗記シートPro v2</title>
+<meta name="theme-color" content="#1c1c1e">
+<title>Anki Pro</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
     :root {
         --bg-color: #1c1c1e;
@@ -232,6 +234,13 @@
     <input type="file" id="file-input" accept="image/*">
 
 <script>
+if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('SW registered!', reg))
+                .catch(err => console.log('SW failed', err));
+        });
+    }
 /**
  * IndexedDB Wrapper
  */
