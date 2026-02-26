@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID別ハプティクス設定</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 50px; }
+        button { padding: 15px 25px; font-size: 16px; cursor: pointer; border-radius: 8px; border: 1px solid #ccc; }
+        #btn-success { background-color: #e6fffa; }
+        #btn-error { background-color: #fff5f5; }
+        #btn-warning { background-color: #fffaf0; }
+    </style>
+</head>
+<body>
+
+    <button id="btn-success">成功（短い1回）</button>
+    <button id="btn-error">エラー（短い2回）</button>
+    <button id="btn-warning">警告（長い1回）</button>
+
+    <script>
+        // --- 1. IDごとのハプティクス設定 ---
+        // 数値はミリ秒。配列の場合は [振動, 休止, 振動...] の順
+        const hapticConfigs = {
+            'btn-success': 50,           // 50msの短い振動
+            'btn-error': [50, 50, 50],   // 50ms振動 -> 50ms休憩 -> 50ms振動
+            'btn-warning': 200           // 200msの少し長い振動
+        };
+
+        // --- 2. 実行用関数 ---
+        function triggerHaptic(id) {
+            const pattern = hapticConfigs[id];
+            
+            if (pattern && "vibrate" in navigator) {
+                navigator.vibrate(pattern);
+                console.log(`Triggered haptic for: ${id}`);
+            }
+        }
+
+        // --- 3. イベントリスナーの一括設定 ---
+        Object.keys(hapticConfigs).forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener('click', () => triggerHaptic(id));
+            }
+        });
+    </script>
+</body>
+</html>
