@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Pro Metronome Web</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="device-body">
+    <div class="lcd-bezel">
+      <div class="lcd-screen" id="lcd-screen">
+        <canvas id="visualizer"></canvas>
+        
+        <div class="lcd-content">
+          <div class="lcd-top">
+            <span id="timer-display">00:00:00</span>
+            <span id="beat-display">4/4 BEAT</span>
+          </div>
+          <div class="lcd-center">
+            <span id="bpm-display">120</span>
+            <span class="bpm-label">BPM</span>
+          </div>
+          <div class="lcd-bottom">
+            <span id="note-display">1拍単位</span>
+            <span id="status-display">STOPPED</span>
+          </div>
+        </div>
+
+        <div id="settings-overlay" class="overlay hidden">
+          <h3 id="panel-title" style="margin-bottom: 10px; border-bottom: 1px solid #1a1a1a;">SETTINGS</h3>
+          
+          <div id="timer-panel" class="setting-panel hidden">
+            <div class="setting-item full-width">
+              <label>TIMER SET (分 : 秒) ※0でカウントアップ</label>
+              <div class="timer-inputs">
+                <input type="number" id="timer-min" value="0" min="0" max="99"> : 
+                <input type="number" id="timer-sec" value="0" min="0" max="59">
+              </div>
+            </div>
+          </div>
+
+          <div id="beat-panel" class="setting-panel hidden">
+            <div class="setting-item">
+              <label>BEAT (分子)</label>
+              <input type="number" id="beat-num" value="4" min="1" max="32">
+            </div>
+            <div class="setting-item">
+              <label>BEAT (分母)</label>
+              <input type="number" id="beat-den" value="4" min="1" max="32">
+            </div>
+            <div class="setting-item full-width" style="margin-top: 10px;">
+              <label>N-TUPLET (連符)</label>
+              <input type="number" id="subdivision-input" value="1" min="1" max="16">
+            </div>
+          </div>
+
+          <div id="sound-panel" class="setting-panel hidden">
+            <div class="setting-item full-width">
+              <label>SOUND TYPE</label>
+              <select id="sound-select">
+                <option value="sine">Electronic (Sine)</option>
+                <option value="wood">Woodblock</option>
+                <option value="beep">Digital Beep</option>
+                <option value="bell">Cowbell-ish</option>
+              </select>
+            </div>
+          </div>
+
+          <button id="close-settings" class="hw-btn">APPLY (適用)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="dial-container">
+        <div id="bpm-dial" class="dial">
+          <div class="dial-grip"></div>
+          <div class="dial-indicator"></div>
+        </div>
+      </div>
+
+      <div class="button-group">
+        <button id="play-btn" class="hw-btn primary-btn">START / STOP</button>
+        <div class="sub-buttons">
+          <button class="hw-btn config-btn" data-target="timer-panel">TIMER</button>
+          <button class="hw-btn config-btn" data-target="beat-panel">BEAT</button>
+          <button class="hw-btn config-btn" data-target="sound-panel">SOUND</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
