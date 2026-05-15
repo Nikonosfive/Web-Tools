@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>YGG-GIS</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #e9ecef; color: #212529; margin: 0; padding: 20px; }
+        .container { max-width: 1250px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+        h1 { color: #d84315; border-bottom: 3px solid #d84315; padding-bottom: 10px; margin-top: 0; font-size: 1.8em; }
+        
+        .controls { display: flex; flex-wrap: wrap; gap: 15px; background: #fbe9e7; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ffccbc; align-items: stretch; }
+        .control-item { display: flex; flex-direction: column; flex: 1; min-width: 200px; }
+        .control-item.full-width { flex: 100%; }
+        label { font-weight: bold; font-size: 0.85em; margin-bottom: 5px; color: #4e342e; }
+        input[type="range"], input[type="file"] { width: 100%; }
+        
+        /* 十字キー風グリッドコントローラー */
+        .grid-buttons-wrapper { background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #ffccbc; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; box-sizing: border-box; }
+        .gb-row { display: flex; gap: 5px; margin-bottom: 5px; width: 100%; justify-content: center; }
+        .gb-btn { padding: 6px 12px; font-size: 0.85em; background: #607d8b; border-radius: 4px; border: none; color: white; cursor: pointer; transition: 0.2s; white-space: nowrap; }
+        .gb-btn:hover { background: #455a64; transform: scale(1.05); }
+        .gb-btn:active { transform: scale(0.95); }
+
+        .preview-area { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 2px dashed #ced4da; }
+        .preview-header { font-weight: bold; margin-bottom: 15px; color: #495057; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+        
+        /* D&Dグリッド */
+        #sortableGrid { display: grid; gap: 8px; transition: 0.2s; }
+        .tile-item {
+            background: #fff; border: 2px solid #adb5bd; border-radius: 6px; padding: 5px;
+            cursor: grab; text-align: center; transition: 0.1s; user-select: none; position: relative;
+            min-height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .tile-item.empty { background: #e9ecef; border-style: dashed; color: #adb5bd; box-shadow: none; }
+        .tile-item:active { cursor: grabbing; transform: scale(1.05); box-shadow: 0 5px 15px rgba(0,0,0,0.3); z-index: 10; }
+        .tile-item.drag-over { border-color: #d84315; background: #ffccbc; }
+        .tile-item img { max-width: 100%; height: auto; border: 1px solid #dee2e6; pointer-events: none; }
+        .tile-name { font-size: 0.7em; color: #495057; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; width: 100%; }
+
+        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        button.main-action { padding: 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1.1em; color: white; transition: 0.2s; flex: 1; min-width: 250px; }
+        #previewBtn { background: #0288d1; } #previewBtn:hover { background: #0277bd; }
+        #renderBtn { background: #d84315; } #renderBtn:hover { background: #bf360c; }
+        #downloadBtn { background: #455a64; } #downloadBtn:disabled { background: #cfd8dc; cursor: not-allowed; }
+        
+        .main-canvas-wrapper { overflow: auto; max-height: 60vh; background: #212529; border-radius: 8px; text-align: center; padding: 10px; position: relative; }
+        #mainCanvas { max-width: 100%; height: auto; box-shadow: 0 4px 10px rgba(0,0,0,0.5); background: white; }
+        #status { padding: 12px; background: #e3f2fd; color: #0d47a1; font-weight: bold; border-radius: 4px; margin-bottom: 15px; border: 1px solid #bbdefb; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>完全版・地形マップジェネレーター</h1>
+    
+    <div class="controls">
+        <div class="control-item full-width">
+            <label>1. XMLファイル読込 (複数可)</label>
+            <input type="file" id="fileInput" accept=".xml" multiple>
+        </div>
+        
+        <div class="control-item" style="flex: 1.5;">
+            <label>2. 地形の枠調整 (海などの空白を復元)</label>
+            <div class="grid-buttons-wrapper">
+                <div class="gb-row"><button id="addTopBtn" class="gb-btn">⬆️ 上に空白行</button></div>
+                <div class="gb-row" style="gap: 20px;">
+                    <button id="addLeftBtn" class="gb-btn">⬅️ 左に列</button>
+                    <div style="font-weight:bold; color:#d84315; font-size:0.9em; display:flex; align-items:center;" id="gridSizeDisp">1列 × 1行</div>
+                    <button id="addRightBtn" class="gb-btn">右に列 ➡️</button>
+                </div>
+                <div class="gb-row"><button id="addBottomBtn" class="gb-btn">⬇️ 下に空白行</button></div>
+            </div>
+        </div>
+
+        <div class="control-item">
+            <label>傾斜の橙色強度: <span id="slopeVal">1.0</span></label>
+            <input type="range" id="slopeFactor" min="0.1" max="3.0" step="0.1" value="1.0">
+            <label style="margin-top:10px;">尾根谷の強調: <span id="bumpVal">15</span></label>
+            <input type="range" id="bumpFactor" min="0" max="50" step="1" value="15">
+        </div>
+        <div class="control-item">
+            <label>標高コントラスト: <span id="elevVal">1.0</span></label>
+            <input type="range" id="elevContrast" min="0.2" max="3.0" step="0.1" value="1.0">
+            <label style="margin-top:10px;">全体コントラスト: <span id="globalVal">1.0</span></label>
+            <input type="range" id="globalContrast" min="0.5" max="2.0" step="0.1" value="1.0">
+        </div>
+        <div class="control-item">
+            <label style="color:#d84315;">最終 高画質倍率: <span id="scaleVal">1.0</span>倍</label>
+            <input type="range" id="resScale" min="0.5" max="4.0" step="0.5" value="1.0">
+            <div style="font-size: 0.75em; color: #666; margin-top: 5px;">※倍率を変えても、プレビューと陰影の見た目は完全に一致します。</div>
+        </div>
+    </div>
+
+    <div id="status">ファイルを選択してください。自動で位置を計算し、並べ替えます。</div>
+
+    <div class="preview-area">
+        <div class="preview-header">
+            <span>3. 配置プレビュー (ドラッグ＆ドロップで微調整可能)</span>
+        </div>
+        <div id="sortableGrid"></div>
+    </div>
+
+    <div class="btn-group">
+        <button id="previewBtn" class="main-action">👁️ 手軽にプレビュー (低解像度・高速)</button>
+        <button id="renderBtn" class="main-action">✨ 高精細マップを生成 (重い処理)</button>
+        <button id="downloadBtn" class="main-action" disabled>💾 PNGを保存</button>
+    </div>
+
+    <div class="main-canvas-wrapper">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+</div>
+
+<script>
+    const el = id => document.getElementById(id);
+    const mainCanvas = el('mainCanvas');
+    const ctx = mainCanvas.getContext('2d');
+    const sortableGrid = el('sortableGrid');
+
+    let loadedTiles = []; 
+    let tileWidth = 0;
+    let tileHeight = 0;
+    let minZ_global = 9999;
+    let maxZ_global = -9999;
+    
+    // 現在のグリッドサイズ状態を保持
+    let currentCols = 1;
+    let currentRows = 1;
+
+    // スライダー連動
+    ['slopeFactor', 'bumpFactor', 'elevContrast', 'globalContrast', 'resScale'].forEach(id => {
+        el(id).oninput = e => el(id.replace('Factor', 'Val').replace('Contrast', 'Val').replace('resScale', 'scaleVal')).textContent = e.target.value;
+    });
+
+    // 1. ファイル読み込みと自動配置
+    el('fileInput').addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        if(files.length === 0) return;
+
+        el('status').textContent = "解析中... 位置情報からマップを構築しています。";
+        let rawTiles = [];
+        minZ_global = 9999;
+        maxZ_global = -9999;
+
+        const parser = new DOMParser();
+
+        for (let i = 0; i < files.length; i++) {
+            const text = await files[i].text();
+            const xml = parser.parseFromString(text, "text/xml");
+            
+            const getT = tag => (xml.getElementsByTagName(tag)[0] || xml.getElementsByTagName("gml:"+tag)[0])?.textContent.trim();
+            const lowerStr = getT("lowerCorner");
+            const upperStr = getT("upperCorner");
+            const highTag = xml.getElementsByTagName("high")[0] || xml.getElementsByTagName("gml:high")[0];
+            const tupleTag = xml.getElementsByTagName("tupleList")[0] || xml.getElementsByTagName("gml:tupleList")[0];
+            
+            // ★修正ポイント: startPointタグを取得
+            const startPointTag = xml.getElementsByTagName("startPoint")[0] || xml.getElementsByTagName("gml:startPoint")[0];
+
+            if(!highTag || !tupleTag || !lowerStr || !upperStr) continue;
+
+            const [lat, lon] = lowerStr.split(/\s+/).map(Number);
+            const [latMax, lonMax] = upperStr.split(/\s+/).map(Number);
+            const high = highTag.textContent.trim().split(/\s+/).map(Number);
+            tileWidth = high[0] + 1; 
+            tileHeight = high[1] + 1;
+
+            // ★修正ポイント: データの開始オフセット位置を解析
+            let startX = 0, startY = 0;
+            if (startPointTag) {
+                const sp = startPointTag.textContent.trim().split(/\s+/).map(Number);
+                if (sp.length >= 2) {
+                    startX = sp[0];
+                    startY = sp[1];
+                }
+            }
+
+            const lines = tupleTag.textContent.trim().split('\n');
+            
+            // ★修正ポイント: デフォルトを0ではなく -9999 (空白) で完全に埋めておく
+            const elevs = new Float32Array(tileWidth * tileHeight).fill(-9999);
+            
+            let localMin = 9999, localMax = -9999;
+            
+            // ★修正ポイント: 常に 0 からではなく、指定された開始座標からデータを格納し始める
+            let currentIdx = startY * tileWidth + startX;
+
+            for (let j = 0; j < lines.length; j++) {
+                const parts = lines[j].split(',');
+                if(parts.length < 2) continue;
+                
+                // 安全対策: 用意した配列を超えそうになったらストップ
+                if (currentIdx >= elevs.length) break;
+
+                const v = parseFloat(parts[1]);
+                elevs[currentIdx] = isNaN(v) ? -9999 : v;
+                
+                if(elevs[currentIdx] !== -9999) {
+                    if(elevs[currentIdx] < localMin) localMin = elevs[currentIdx];
+                    if(elevs[currentIdx] > localMax) localMax = elevs[currentIdx];
+                    if(elevs[currentIdx] < minZ_global) minZ_global = elevs[currentIdx];
+                    if(elevs[currentIdx] > maxZ_global) maxZ_global = elevs[currentIdx];
+                }
+                
+                // 次のピクセルへ進む
+                currentIdx++;
+            }
+            rawTiles.push({ isEmpty: false, id: 'tile_'+i, name: files[i].name, data: elevs, min: localMin, max: localMax, lat, lon, latMax, lonMax });
+        }
+
+        if(rawTiles.length === 0) return;
+
+        let gMinLat = 180, gMaxLat = 0, gMinLon = 180, gMaxLon = 0;
+        rawTiles.forEach(t => {
+            if(t.lat < gMinLat) gMinLat = t.lat; if(t.latMax > gMaxLat) gMaxLat = t.latMax;
+            if(t.lon < gMinLon) gMinLon = t.lon; if(t.lonMax > gMaxLon) gMaxLon = t.lonMax;
+        });
+
+        const dx = (rawTiles[0].lonMax - rawTiles[0].lon) / tileWidth;
+        const dy = (rawTiles[0].latMax - rawTiles[0].lat) / tileHeight;
+
+        rawTiles.forEach(t => {
+            t.gridX = Math.round((t.lon - gMinLon) / (tileWidth * dx));
+            t.gridY = Math.round((gMaxLat - t.latMax) / (tileHeight * dy));
+        });
+
+        currentCols = Math.max(...rawTiles.map(t => t.gridX)) + 1;
+        currentRows = Math.max(...rawTiles.map(t => t.gridY)) + 1;
+
+        loadedTiles = new Array(currentCols * currentRows).fill(null);
+        rawTiles.forEach(t => {
+            const idx = t.gridY * currentCols + t.gridX;
+            if(idx < loadedTiles.length) loadedTiles[idx] = t;
+        });
+
+        loadedTiles = loadedTiles.map((t, idx) => t ? t : createEmptyTile());
+
+        updateGridDisp();
+        refreshPreviewArea();
+        el('status').textContent = `読込完了！※左端などが海のデータで欠けている場合、「⬅️左に列」を押して空白を足せます。`;
+    });
+
+    // 空白タイルの生成ヘルパー
+    function createEmptyTile() { return { isEmpty: true, id: 'empty_' + Date.now() + Math.random(), name: '(空白)' }; }
+
+    // UIの行列表示を更新
+    function updateGridDisp() {
+        el('gridSizeDisp').textContent = `${currentCols}列 × ${currentRows}行`;
+        sortableGrid.style.gridTemplateColumns = `repeat(${currentCols}, 1fr)`;
+    }
+
+    // ★最強のグリッドコントローラー（行・列の追加機能）★
+    el('addLeftBtn').onclick = () => {
+        if(loadedTiles.length === 0) return;
+        let newTiles = [];
+        for(let r=0; r<currentRows; r++) {
+            newTiles.push(createEmptyTile()); // 左端に空白を挿入
+            for(let c=0; c<currentCols; c++) { newTiles.push(loadedTiles[r*currentCols + c]); }
+        }
+        loadedTiles = newTiles;
+        currentCols++;
+        updateGridDisp(); refreshPreviewArea();
+    };
+
+    el('addRightBtn').onclick = () => {
+        if(loadedTiles.length === 0) return;
+        let newTiles = [];
+        for(let r=0; r<currentRows; r++) {
+            for(let c=0; c<currentCols; c++) { newTiles.push(loadedTiles[r*currentCols + c]); }
+            newTiles.push(createEmptyTile()); // 右端に空白を挿入
+        }
+        loadedTiles = newTiles;
+        currentCols++;
+        updateGridDisp(); refreshPreviewArea();
+    };
+
+    el('addTopBtn').onclick = () => {
+        if(loadedTiles.length === 0) return;
+        for(let c=0; c<currentCols; c++) loadedTiles.unshift(createEmptyTile()); // 上に1行追加
+        currentRows++;
+        updateGridDisp(); refreshPreviewArea();
+    };
+
+    el('addBottomBtn').onclick = () => {
+        if(loadedTiles.length === 0) return;
+        for(let c=0; c<currentCols; c++) loadedTiles.push(createEmptyTile()); // 下に1行追加
+        currentRows++;
+        updateGridDisp(); refreshPreviewArea();
+    };
+
+    // 2. プレビュー領域の描画
+    function refreshPreviewArea() {
+        sortableGrid.innerHTML = '';
+        loadedTiles.forEach(tile => {
+            const div = document.createElement('div');
+            div.className = 'tile-item' + (tile.isEmpty ? ' empty' : '');
+            div.draggable = true; div.dataset.id = tile.id;
+
+            if(!tile.isEmpty) {
+                const pCanvas = document.createElement('canvas');
+                pCanvas.width = 100; pCanvas.height = Math.floor(100 * (tileHeight / tileWidth));
+                const pCtx = pCanvas.getContext('2d');
+                const pData = pCtx.createImageData(pCanvas.width, pCanvas.height);
+                for(let y=0; y<pCanvas.height; y++){
+                    for(let x=0; x<pCanvas.width; x++){
+                        const z = tile.data[Math.floor(y*(tileHeight/pCanvas.height))*tileWidth + Math.floor(x*(tileWidth/pCanvas.width))];
+                        const idx = (y * pCanvas.width + x) * 4;
+                        if(z === -9999) { pData.data[idx+3] = 0; }
+                        else {
+                            let c = (z - tile.min) / (tile.max - tile.min) * 255;
+                            pData.data[idx] = pData.data[idx+1] = pData.data[idx+2] = c;
+                            pData.data[idx+3] = 255;
+                        }
+                    }
+                }
+                pCtx.putImageData(pData, 0, 0);
+                const img = document.createElement('img'); img.src = pCanvas.toDataURL(); div.appendChild(img);
+            } else { div.innerHTML = '<span style="font-size:1.5em;color:#ced4da;">+</span>'; }
+
+            const nameSpan = document.createElement('div'); nameSpan.className = 'tile-name'; nameSpan.textContent = tile.name;
+            div.appendChild(nameSpan); sortableGrid.appendChild(div);
+        });
+        setupDragAndDrop();
+    }
+
+    // ドラッグ＆ドロップロジック
+    function setupDragAndDrop() {
+        let draggedItem = null;
+        const items = sortableGrid.querySelectorAll('.tile-item');
+        items.forEach(item => {
+            item.addEventListener('dragstart', function(e) { draggedItem = this; setTimeout(() => this.style.opacity = '0.5', 0); });
+            item.addEventListener('dragend', function() { setTimeout(() => { this.style.opacity = '1'; draggedItem = null; items.forEach(i => i.classList.remove('drag-over')); }, 0); });
+            item.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('drag-over'); });
+            item.addEventListener('dragleave', function() { this.classList.remove('drag-over'); });
+            item.addEventListener('drop', function(e) {
+                e.preventDefault(); this.classList.remove('drag-over');
+                if (this !== draggedItem) {
+                    const bounding = this.getBoundingClientRect();
+                    this.parentNode.insertBefore(draggedItem, (e.clientX > bounding.x + bounding.width / 2) ? this.nextSibling : this);
+                    loadedTiles = Array.from(sortableGrid.querySelectorAll('.tile-item')).map(domItem => loadedTiles.find(t => t.id === domItem.dataset.id));
+                }
+            });
+        });
+    }
+
+    // ★修正ポイント: 完全に解像度から独立した、絶対座標での地形サンプリング★
+    function getGridZ(gx, gy) {
+        if (gx < 0 || gy < 0 || gx >= tileWidth * currentCols || gy >= tileHeight * currentRows) return -9999;
+        const col = Math.floor(gx / tileWidth);
+        const row = Math.floor(gy / tileHeight);
+        const tile = loadedTiles[row * currentCols + col];
+        if (!tile || tile.isEmpty) return -9999;
+        return tile.data[(gy % tileHeight) * tileWidth + (gx % tileWidth)];
+    }
+
+    // 3. レンダリングエンジン
+    function generateMap(isPreview) {
+        if(loadedTiles.length === 0) return alert("XMLファイルを読み込んでください。");
+        
+        el('downloadBtn').disabled = true;
+        const scale = isPreview ? 0.2 : parseFloat(el('resScale').value);
+        
+        const slopeM = parseFloat(el('slopeFactor').value);
+        const bumpM = parseFloat(el('bumpFactor').value);
+        const elevC = parseFloat(el('elevContrast').value);
+        const globC = parseFloat(el('globalContrast').value);
+
+        const outW = Math.floor(tileWidth * currentCols * scale);
+        const outH = Math.floor(tileHeight * currentRows * scale);
+        mainCanvas.width = outW;
+        mainCanvas.height = outH;
+
+        const imgData = ctx.createImageData(outW, outH);
+        const pixels = imgData.data;
+        const applyContrast = (color, c) => Math.max(0, Math.min(255, (color - 128) * c + 128));
+
+        for (let y = 0; y < outH; y++) {
+            for (let x = 0; x < outW; x++) {
+                // 描画ピクセル座標から、元の絶対グリッド座標(gx, gy)を逆算
+                const gx = Math.floor(x / scale);
+                const gy = Math.floor(y / scale);
+                const z = getGridZ(gx, gy);
+                const p = (y * outW + x) * 4;
+
+                if (z === -9999) { pixels[p+3] = 0; continue; }
+
+                // プレビュー縮小率に関わらず、"常に元のマップの1マス隣"を取得する（これで見た目が100%一致します）
+                const zL = getGridZ(gx - 1, gy);
+                const zR = getGridZ(gx + 1, gy);
+                const zT = getGridZ(gx, gy - 1);
+                const zB = getGridZ(gx, gy + 1);
+
+                let zNorm = (z - minZ_global) / (maxZ_global - minZ_global);
+                if (isNaN(zNorm)) zNorm = 0; 
+                zNorm = Math.pow(zNorm, 1 / elevC);
+                
+                let base = 80 + zNorm * 175;
+
+                if (zL!==-9999 && zR!==-9999 && zT!==-9999 && zB!==-9999) {
+                    base -= (zL + zR + zT + zB - 4 * z) * bumpM;
+                }
+
+                const slp = (zL!==-9999 && zR!==-9999 && zT!==-9999 && zB!==-9999) ? Math.sqrt(((zR-zL)/2)**2 + ((zB-zT)/2)**2) : 0;
+                let mix = Math.min(1, slp * 0.4 * slopeM);
+                
+                let muddyFactor = 1.0 - zNorm;
+                let targetR = 255 - muddyFactor * 120;
+                let targetG = 120 + muddyFactor * 40;
+                let targetB = muddyFactor * 100;
+                
+                pixels[p]   = applyContrast(base * (1-mix) + targetR * mix, globC);
+                pixels[p+1] = applyContrast(base * (1-mix) + targetG * mix, globC);
+                pixels[p+2] = applyContrast(base * (1-mix) + targetB * mix, globC);
+                pixels[p+3] = 255;
+            }
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+        if(!isPreview) el('downloadBtn').disabled = false;
+        el('status').textContent = isPreview ? "👁️ 簡易プレビューを表示しました（陰影は高精細版と完全に同じです）。" : "✨ 高精細マップの生成が完了しました！";
+    }
+
+    el('previewBtn').onclick = () => { el('status').textContent = "プレビューを生成中..."; setTimeout(() => generateMap(true), 50); };
+    el('renderBtn').onclick = () => { el('status').textContent = "高精細マップをレンダリング中..."; setTimeout(() => generateMap(false), 50); };
+    el('downloadBtn').onclick = () => { const link = document.createElement('a'); link.download = `terrain_map_${Date.now()}.png`; link.href = mainCanvas.toDataURL('image/png'); link.click(); };
+</script>
+</body>
+</html>
