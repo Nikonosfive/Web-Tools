@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SmartScore Ultimate - Full Integrated</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <style>
+        :root { --bg-primary: #f1f5f9; --bg-card: #ffffff; --text-main: #1e293b; --accent: #3b82f6; }
+        .dark { --bg-primary: #0f172a; --bg-card: #1e293b; --text-main: #f1f5f9; --accent: #60a5fa; }
+        body { background-color: var(--bg-primary); color: var(--text-main); transition: background-color 0.3s; overflow: hidden; margin: 0; user-select: none; }
+        
+        /* ツールバーのスタイル */
+        #toolbar { z-index: 1000; touch-action: none; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); backdrop-filter: blur(12px); }
+        /* ドラッグ中はアニメーションを切ることで遅延なく追従させる */
+        #toolbar.dragging { transition: none !important; }
+        
+        /* 最小化時のスタイル */
+        .minimized { width: 64px !important; height: 64px !important; border-radius: 32px !important; overflow: hidden; background-color: rgba(30, 41, 59, 0.8) !important; cursor: grab; }
+        .minimized:active { cursor: grabbing; }
+        .minimized > #toolbar-content, .minimized > #toolbar-drag { display: none !important; }
+        .minimized > #expand-btn { display: flex !important; }
+
+        /* ビューアエリア */
+        #viewer-container { width: 100vw; height: 100vh; overflow: hidden; position: relative; display: flex; justify-content: center; align-items: center; }
+        .mode-scroll-v #viewer-container { overflow-y: auto; align-items: flex-start; }
+        .mode-scroll-h #viewer-container { overflow-x: auto; flex-direction: row; align-items: center; }
+
+        .pdf-page { box-shadow: 0 10px 30px rgba(0,0,0,0.15); background: white; transition: transform 0.2s; object-fit: contain; max-width: 100%; max-height: 100%; }
+        .dark .pdf-page { filter: invert(0.88) hue-rotate(180deg); }
+
+        /* Overviewパネル */
+        #overview-pane { position: fixed; bottom: 0; left: 0; right: 0; height: 200px; background: rgba(15, 23, 42, 0.95); display: none; z-index: 2000; padding: 15px; overflow-x: auto; border-top: 1px solid #334155; white-space: nowrap; }
+        .thumb-container { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; margin: 0 8px; position: relative; cursor: pointer; transition: transform 0.2s; }
+        .thumb-container:hover { transform: scale(1.05); }
+        .thumb-img { height: 130px; width: auto; object-fit: contain; border: 2px solid transparent; border-radius: 4px; background: white; }
+        .active-thumb .thumb-img { border-color: #3b82f6; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
+        .thumb-skip-btn { position: absolute; top: -8px; right: -8px; background: #ef4444; color: white; border-radius: 50%; width: 24px; height: 24px; text-align: center; line-height: 24px; font-size: 14px; cursor: pointer; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .skipped .thumb-img { opacity: 0.3; filter: grayscale(1); }
+        .thumb-label { color: white; font-size: 12px; margin-top: 6px; font-weight: bold; }
+
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .active-btn { background-color: var(--accent) !important; color: white !important; font-weight: bold; }
+
+        /* ローディング画面 */
+        #loading-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.9); z-index: 5000; flex-direction: column; align-items: center; justify-content: center; color: white; }
+        .spinner { border: 4px solid rgba(255,255,255,0.1); width: 48px; height: 48px; border-radius: 50%; border-left-color: #3b82f6; animation: spin 1s linear infinite; margin-bottom: 16px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="mode-page">
+
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text" class="text-lg font-bold tracking-wider">Loading...</div>
+        <div id="loading-sub" class="text-xs text-slate-400 mt-2"></div>
+    </div>
+
+    <div id="toolbar" class="fixed bottom-6 right-6 w-[340px] bg-slate-800/95 text-white p-5 rounded-3xl shadow-2xl flex flex-col gap-4 border border-slate-700/50">
+        <div id="toolbar-drag" class="flex justify-between items-center cursor-move pb-3 border-b border-slate-700/50">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-sm shadow-inner">SS</div>
+                <div class="flex flex-col pointer-events-none">
+                    <span class="text-[10px] font-black tracking-widest text-blue-400">SMARTSCORE</span>
+                    <span id="score-title-disp" class="text-xs text-slate-300 truncate max-w-[150px]">No Score Loaded</span>
+                </div>
+            </div>
+            <button onclick="toggleMinimize()" class="w-8 h-8 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-full transition-colors">➖</button>
+        </div>
+
+        <div id="toolbar-content" class="flex flex-col gap-4">
+            <div class="flex justify-between items-center bg-slate-900/80 rounded-2xl p-2 shadow-inner">
+                <button onclick="navPrev()" class="w-12 h-10 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-xl transition-transform active:scale-95 text-lg">◀</button>
+                <div class="flex flex-col items-center">
+                    <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Page</span>
+                    <span id="page-info" class="font-mono font-bold text-lg text-white">0 / 0</span>
+                </div>
+                <button onclick="navNext()" class="w-12 h-10 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-xl transition-transform active:scale-95 text-lg">▶</button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+                <button onclick="openModal('lib-modal')" class="flex flex-col items-center justify-center bg-slate-700 hover:bg-slate-600 py-3 rounded-xl transition-colors">
+                    <span class="text-lg mb-1">📚</span><span class="text-[9px] font-bold">LIBRARY</span>
+                </button>
+                <button onclick="toggleOverview()" class="flex flex-col items-center justify-center bg-slate-700 hover:bg-slate-600 py-3 rounded-xl transition-colors">
+                    <span class="text-lg mb-1">🖼️</span><span class="text-[9px] font-bold">OVERVIEW</span>
+                </button>
+                <button onclick="openModal('settings-modal')" class="flex flex-col items-center justify-center bg-slate-700 hover:bg-slate-600 py-3 rounded-xl transition-colors">
+                    <span class="text-lg mb-1">⚙️</span><span class="text-[9px] font-bold">SETTINGS</span>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-1">
+                <button id="btn-awake" onclick="toggleWakeLock()" class="flex items-center justify-center gap-2 py-2 rounded-xl text-[10px] font-bold transition-all bg-slate-700 text-slate-300">
+                    <div id="awake-dot" class="w-2 h-2 rounded-full bg-slate-500"></div> AWAKE
+                </button>
+                <button onclick="toggleFullScreen()" class="flex items-center justify-center gap-2 py-2 rounded-xl text-[10px] font-bold bg-slate-700 hover:bg-slate-600 transition-all">
+                    🔲 FULLSCREEN
+                </button>
+            </div>
+            
+            <button onclick="toggleZen()" class="text-[10px] font-bold text-slate-400 hover:text-white mt-1 uppercase tracking-widest text-center">Tap here for Zen Mode</button>
+        </div>
+        
+        <div id="expand-btn" class="hidden w-full h-full text-2xl items-center justify-center text-blue-400 font-bold pointer-events-none">➕</div>
+    </div>
+
+    <main id="viewer-container">
+        <div id="render-area" class="flex flex-wrap justify-center items-center gap-6 w-full h-full p-4"></div>
+    </main>
+
+    <div id="overview-pane">
+        <div id="thumb-list" class="flex items-center h-full pb-2"></div>
+    </div>
+
+    <div id="settings-modal" class="modal" onclick="if(event.target===this)closeModal('settings-modal')">
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl w-80 shadow-2xl space-y-5">
+            <h2 class="text-center font-black text-lg text-slate-800 dark:text-white border-b pb-2">Settings</h2>
+            
+            <div class="space-y-2">
+                <h3 class="font-bold text-xs text-slate-500 uppercase">Layout Style</h3>
+                <div class="grid grid-cols-2 gap-2 text-[11px]">
+                    <button id="set-single" onclick="updateSetting('isSpread', false)" class="bg-slate-100 dark:bg-slate-700 p-2 rounded-lg">単一表示</button>
+                    <button id="set-spread" onclick="updateSetting('isSpread', true)" class="bg-slate-100 dark:bg-slate-700 p-2 rounded-lg">見開き表示</button>
+                    <button id="set-lr" onclick="updateSetting('reverseOrder', false)" class="bg-slate-100 dark:bg-slate-700 p-2 rounded-lg">左→右 送り</button>
+                    <button id="set-rl" onclick="updateSetting('reverseOrder', true)" class="bg-slate-100 dark:bg-slate-700 p-2 rounded-lg">右→左 送り</button>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <h3 class="font-bold text-xs text-slate-500 uppercase">Navigation Mode</h3>
+                <div class="grid grid-cols-3 gap-2 text-[10px]">
+                    <button id="nav-page" onclick="updateSetting('navMode', 'page')" class="bg-slate-100 dark:bg-slate-700 py-2 rounded-lg">Page</button>
+                    <button id="nav-scroll-v" onclick="updateSetting('navMode', 'scroll-v')" class="bg-slate-100 dark:bg-slate-700 py-2 rounded-lg">V-Scroll</button>
+                    <button id="nav-scroll-h" onclick="updateSetting('navMode', 'scroll-h')" class="bg-slate-100 dark:bg-slate-700 py-2 rounded-lg">H-Scroll</button>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <h3 class="font-bold text-xs text-slate-500 uppercase">Appearance</h3>
+                <div class="grid grid-cols-3 gap-2 text-[10px]">
+                    <button id="theme-auto" onclick="updateTheme('auto')" class="bg-slate-100 dark:bg-slate-700 py-2 rounded-lg">Auto</button>
+                    <button id="theme-light" onclick="updateTheme('light')" class="bg-slate-100 dark:bg-slate-700 py-2 rounded-lg">Light</button>
+                    <button id="theme-dark" onclick="updateTheme('dark')" class="bg-slate-100 dark:bg-slate-700 py-2 rounded-lg">Dark</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="lib-modal" class="modal" onclick="if(event.target===this)closeModal('lib-modal')">
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl w-[90%] max-w-md shadow-2xl">
+            <h2 class="font-black text-lg mb-4 text-center">Score Library</h2>
+            <input type="file" id="pdf-input" class="hidden" onchange="addFile(event)" accept="application/pdf">
+            <button onclick="document.getElementById('pdf-input').click()" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl mb-4 font-bold transition-colors shadow-lg">+ Import New PDF</button>
+            <div id="fav-bar" class="flex gap-2 overflow-x-auto pb-2 mb-2 empty:hidden border-b dark:border-slate-700"></div>
+            <div id="score-list" class="max-h-60 overflow-y-auto space-y-2 pr-1"></div>
+        </div>
+    </div>
+
+    <script>
+        const db = new Dexie("SmartScorePro");
+        db.version(1).stores({ scores: '++id, title, data, isFav, skipPages', settings: 'key, value' });
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const noSleep = new NoSleep();
+
+        let state = {
+            pdf: null, activeScore: null, page: 1, 
+            isSpread: false, reverseOrder: false, navMode: 'page',
+            theme: 'auto', wakeLock: false, renderTimer: null
+        };
+
+        async function init() {
+            const saved = await db.settings.toArray();
+            saved.forEach(s => state[s.key] = s.value);
+            
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                if(state.theme === 'auto') applyTheme();
+            });
+
+            refreshLibrary();
+            updateUI();
+            setupEvents();
+        }
+
+        // --- 描画ロジック ---
+        async function render() {
+            if (!state.pdf) return;
+            const container = document.getElementById('render-area');
+            container.innerHTML = '';
+            
+            const viewW = container.clientWidth;
+            const viewH = container.clientHeight;
+            
+            if (state.navMode === 'page') {
+                let pages = state.isSpread ? [state.page, state.page + 1] : [state.page];
+                if (state.reverseOrder && state.isSpread) pages.reverse();
+                for (let n of pages) if (n > 0 && n <= state.pdf.numPages) await draw(n, container, viewW, viewH);
+            } else {
+                for (let i = 1; i <= state.pdf.numPages; i++) await draw(i, container, viewW, viewH, true);
+            }
+            document.getElementById('page-info').textContent = `${state.page} / ${state.pdf.numPages}`;
+            document.getElementById('score-title-disp').textContent = state.activeScore.title;
+        }
+
+        async function draw(num, target, vW, vH, isScroll = false) {
+            const page = await state.pdf.getPage(num);
+            const baseVp = page.getViewport({ scale: 1.0 });
+            
+            const padding = isScroll ? 20 : 40;
+            const availableW = isScroll ? (vW - padding) : (state.isSpread ? (vW/2 - padding) : (vW - padding));
+            const availableH = vH - padding;
+
+            let scale = Math.min(availableW / baseVp.width, availableH / baseVp.height);
+            if(isScroll) scale = availableW / baseVp.width;
+
+            const vp = page.getViewport({ scale });
+            const canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page' + (state.activeScore?.skipPages?.includes(num) ? ' skipped' : '');
+            canvas.width = vp.width; canvas.height = vp.height;
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+            target.appendChild(canvas);
+        }
+
+        // --- ナビゲーション操作 ---
+        function navNext() {
+            if (!state.pdf || state.page >= state.pdf.numPages) return;
+            let step = state.isSpread ? 2 : 1;
+            let next = state.page + step;
+            while (state.activeScore?.skipPages?.includes(next) && next < state.pdf.numPages) next++;
+            state.page = Math.min(next, state.pdf.numPages);
+            render();
+            if(document.getElementById('overview-pane').style.display === 'block') renderThumbs();
+        }
+
+        function navPrev() {
+            if (!state.pdf || state.page <= 1) return;
+            state.page = Math.max(1, state.page - (state.isSpread ? 2 : 1));
+            render();
+            if(document.getElementById('overview-pane').style.display === 'block') renderThumbs();
+        }
+
+        // --- ★画面外 ＆ 4辺スナップ計算処理 ---
+        function snapToBounds() {
+            const tb = document.getElementById('toolbar');
+            const rect = tb.getBoundingClientRect();
+            const margin = 16;
+            const isMin = tb.classList.contains('minimized');
+            
+            let newLeft = rect.left;
+            let newTop = rect.top;
+            
+            // まずは画面外にはみ出さないようにクランプ（上下左右）
+            newLeft = Math.max(margin, Math.min(newLeft, window.innerWidth - rect.width - margin));
+            newTop = Math.max(margin, Math.min(newTop, window.innerHeight - rect.height - margin));
+
+            // ★最小化時は4辺のいずれかに吸い付かせる
+            if (isMin) {
+                const distLeft = newLeft - margin;
+                const distRight = (window.innerWidth - rect.width - margin) - newLeft;
+                const distTop = newTop - margin;
+                const distBottom = (window.innerHeight - rect.height - margin) - newTop;
+
+                // 一番近い辺を見つける
+                const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+                if (minDist === distLeft) newLeft = margin;
+                else if (minDist === distRight) newLeft = window.innerWidth - rect.width - margin;
+                else if (minDist === distTop) newTop = margin;
+                else if (minDist === distBottom) newTop = window.innerHeight - rect.height - margin;
+            }
+            
+            tb.style.left = newLeft + 'px';
+            tb.style.top = newTop + 'px';
+            tb.style.right = 'auto';
+            tb.style.bottom = 'auto';
+        }
+
+        // --- イベントセットアップ ---
+        function setupEvents() {
+            window.addEventListener('resize', () => { 
+                clearTimeout(state.renderTimer); 
+                state.renderTimer = setTimeout(render, 200); 
+                snapToBounds();
+            });
+            window.addEventListener('keydown', e => { if(e.key==="ArrowRight" || e.key===" ") navNext(); if(e.key==="ArrowLeft") navPrev(); });
+            
+            const hamm = new Hammer(document.getElementById('viewer-container'));
+            hamm.get('swipe').set({ direction: Hammer.DIRECTION_ALL });
+            hamm.on('swipeleft', navNext); hamm.on('swiperight', navPrev);
+
+            document.getElementById('viewer-container').addEventListener('click', (e) => {
+                if (state.navMode !== 'page' || e.target.closest('#toolbar') || e.target.closest('#overview-pane') || e.target.closest('.modal')) return;
+                const clickX = e.clientX;
+                const width = window.innerWidth;
+                if (clickX > width * 0.6) navNext();
+                else if (clickX < width * 0.4) navPrev();
+            });
+
+            // --- ★改良されたドラッグ ＆ クリック判定イベント ---
+            const tb = document.getElementById('toolbar');
+            let isDragging = false, isMoved = false;
+            let offsetX, offsetY, startX, startY;
+
+            const startDrag = (e) => {
+                const isMin = tb.classList.contains('minimized');
+                
+                // 展開時はヘッダー(toolbar-drag)のみ許可、最小化時は全体を許可
+                if (!isMin && !e.target.closest('#toolbar-drag')) return;
+                
+                // 展開時にボタンを押した場合はドラッグを開始しない
+                if (!isMin && e.target.tagName.toLowerCase() === 'button') return; 
+
+                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                
+                isDragging = true;
+                isMoved = false; // 初期化
+                startX = clientX;
+                startY = clientY;
+                
+                tb.classList.add('dragging');
+                
+                const rect = tb.getBoundingClientRect();
+                offsetX = clientX - rect.left;
+                offsetY = clientY - rect.top;
+            };
+
+            const moveDrag = (e) => {
+                if (!isDragging) return;
+                
+                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                
+                // 動いた距離が5pxを超えたら「ドラッグ」として判定する
+                if (Math.abs(clientX - startX) > 5 || Math.abs(clientY - startY) > 5) {
+                    isMoved = true;
+                }
+                
+                // ドラッグ判定になったら座標を更新
+                if (isMoved) {
+                    e.preventDefault(); // スクロール防止
+                    tb.style.left = (clientX - offsetX) + 'px';
+                    tb.style.top = (clientY - offsetY) + 'px';
+                    tb.style.right = 'auto';
+                    tb.style.bottom = 'auto';
+                }
+            };
+
+            const endDrag = (e) => {
+                if (!isDragging) return;
+                isDragging = false;
+                tb.classList.remove('dragging');
+                
+                const isMin = tb.classList.contains('minimized');
+                
+                // 最小化状態で、かつドラッグせずに離した場合（クリックとみなす）
+                if (isMin && !isMoved) {
+                    toggleMinimize();
+                } else {
+                    snapToBounds(); // 移動した場合はスナップ処理を呼ぶ
+                }
+            };
+
+            // ツールバー全体にイベントをバインド
+            tb.addEventListener('mousedown', startDrag);
+            tb.addEventListener('touchstart', startDrag, { passive: false });
+            
+            document.addEventListener('mousemove', moveDrag);
+            document.addEventListener('touchmove', moveDrag, { passive: false });
+            
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+        }
+
+        // --- ファイルロードとサムネイル生成 ---
+        async function addFile(e) {
+            const f = e.target.files[0];
+            if(!f) return;
+            showLoading("Saving to Database...");
+            try {
+                await db.scores.add({ title: f.name, data: await f.arrayBuffer(), isFav: false, skipPages: [], thumbs: [] });
+                refreshLibrary();
+            } catch (err) {
+                console.error(err);
+                alert("ファイルの保存に失敗しました。");
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function loadScore(id) {
+            showLoading("Loading PDF...");
+            try {
+                const s = await db.scores.get(id);
+                if(!s) throw new Error("スコアが見つかりません");
+                if(!s.skipPages) s.skipPages = []; 
+                state.activeScore = s;
+
+                const typedArray = new Uint8Array(s.data);
+                state.pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+                
+                if (!s.thumbs || s.thumbs.length !== state.pdf.numPages) {
+                    s.thumbs = [];
+                    for(let i=1; i<=state.pdf.numPages; i++) {
+                        document.getElementById('loading-sub').textContent = `Generating Thumbnails (${i}/${state.pdf.numPages})`;
+                        const page = await state.pdf.getPage(i);
+                        const baseVp = page.getViewport({ scale: 1.0 });
+                        const scale = 150 / baseVp.height; 
+                        const vp = page.getViewport({ scale });
+                        const can = document.createElement('canvas');
+                        can.width = vp.width; can.height = vp.height;
+                        await page.render({ canvasContext: can.getContext('2d'), viewport: vp }).promise;
+                        s.thumbs.push(can.toDataURL('image/jpeg', 0.5));
+                    }
+                    try { await db.scores.put(s); } catch (dbErr) { console.warn("Thumb save limit:", dbErr); }
+                }
+
+                state.page = 1; 
+                render(); 
+                closeModal('lib-modal');
+            } catch (error) {
+                console.error("PDF読み込みエラー:", error);
+                alert("PDFの読み込みに失敗しました。\n" + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // --- ライブラリ管理 ---
+        async function refreshLibrary() {
+            const scores = await db.scores.toArray();
+            const list = document.getElementById('score-list'), fav = document.getElementById('fav-bar');
+            list.innerHTML = ''; fav.innerHTML = '';
+            scores.forEach(s => {
+                const row = document.createElement('div');
+                row.className = "flex justify-between items-center p-3 bg-slate-100 dark:bg-slate-700/50 rounded-xl text-sm transition-colors hover:bg-slate-200 dark:hover:bg-slate-700";
+                row.innerHTML = `<span class="truncate flex-1 cursor-pointer font-bold" onclick="loadScore(${s.id})">${s.title}</span>
+                    <button onclick="toggleFav(${s.id})" class="mx-3 text-xl hover:scale-125 transition-transform ${s.isFav ? 'text-yellow-400' : 'text-slate-400'}">${s.isFav?'★':'☆'}</button>
+                    <button onclick="delScore(${s.id})" class="text-red-500 font-black hover:bg-red-100 dark:hover:bg-red-900/50 w-8 h-8 rounded-full transition-colors">✕</button>`;
+                list.appendChild(row);
+
+                if(s.isFav) {
+                    const b = document.createElement('button');
+                    b.className = "bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap shadow hover:bg-blue-500 transition-colors";
+                    b.textContent = s.title.slice(0,10) + (s.title.length>10?'...':''); 
+                    b.onclick = () => loadScore(s.id);
+                    fav.appendChild(b);
+                }
+            });
+        }
+
+        async function toggleFav(id) { const s = await db.scores.get(id); await db.scores.update(id, {isFav: !s.isFav}); refreshLibrary(); }
+        async function delScore(id) { if(confirm("Are you sure you want to delete this score?")) { await db.scores.delete(id); refreshLibrary(); } }
+
+        // --- 設定・UI状態 ---
+        function updateSetting(k, v) { 
+            state[k] = v; 
+            db.settings.put({ key: k, value: v }); 
+            updateUI(); 
+            render(); 
+        }
+
+        function updateTheme(th) {
+            state.theme = th;
+            db.settings.put({ key: 'theme', value: th });
+            updateUI();
+        }
+
+        function applyTheme() {
+            let t = state.theme;
+            if (t === 'auto') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            t === 'dark' ? document.documentElement.classList.add('dark') : document.documentElement.classList.remove('dark');
+        }
+        
+        function updateUI() {
+            document.body.className = `mode-${state.navMode}`;
+            
+            const toggles = [
+                ['set-single', !state.isSpread], ['set-spread', state.isSpread],
+                ['set-lr', !state.reverseOrder], ['set-rl', state.reverseOrder],
+                ['nav-page', state.navMode === 'page'], ['nav-scroll-v', state.navMode === 'scroll-v'], ['nav-scroll-h', state.navMode === 'scroll-h'],
+                ['theme-auto', state.theme === 'auto'], ['theme-light', state.theme === 'light'], ['theme-dark', state.theme === 'dark']
+            ];
+            toggles.forEach(([id, cond]) => document.getElementById(id)?.classList.toggle('active-btn', cond));
+
+            applyTheme();
+
+            const btnAwake = document.getElementById('btn-awake');
+            const awakeDot = document.getElementById('awake-dot');
+            if(state.wakeLock) {
+                btnAwake.className = "flex items-center justify-center gap-2 py-2 rounded-xl text-[10px] font-bold transition-all bg-green-600/20 text-green-400 border border-green-500/50";
+                awakeDot.className = "w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,1)]";
+            } else {
+                btnAwake.className = "flex items-center justify-center gap-2 py-2 rounded-xl text-[10px] font-bold transition-all bg-slate-700 hover:bg-slate-600 text-slate-300";
+                awakeDot.className = "w-2 h-2 rounded-full bg-slate-500";
+            }
+        }
+
+        function toggleWakeLock() {
+            if (state.wakeLock) {
+                noSleep.disable();
+                state.wakeLock = false;
+            } else {
+                noSleep.enable();
+                state.wakeLock = true;
+            }
+            updateUI();
+        }
+
+        // --- Overview パネル ---
+        function toggleOverview() {
+            if(!state.pdf) return;
+            const p = document.getElementById('overview-pane');
+            const show = p.style.display === 'none' || !p.style.display;
+            p.style.display = show ? 'block' : 'none';
+            if(show) {
+                renderThumbs();
+                setTimeout(() => {
+                    const activeThumb = p.querySelector('.active-thumb');
+                    if(activeThumb) activeThumb.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+                }, 50);
+            }
+        }
+
+        function renderThumbs() {
+            const list = document.getElementById('thumb-list');
+            list.innerHTML = '';
+            
+            if (!state.activeScore.thumbs) return;
+
+            state.activeScore.thumbs.forEach((imgData, idx) => {
+                const i = idx + 1;
+                const isSkipped = state.activeScore.skipPages.includes(i);
+                const div = document.createElement('div');
+                div.className = `thumb-container ${isSkipped ? 'skipped' : ''} ${state.page === i ? 'active-thumb' : ''}`;
+                div.innerHTML = `
+                    <div class="thumb-skip-btn" onclick="event.stopPropagation(); toggleSkip(${i})">×</div>
+                    <img src="${imgData}" class="thumb-img" alt="Page ${i}">
+                    <div class="thumb-label">${i}</div>
+                `;
+                div.onclick = () => { state.page = i; render(); toggleOverview(); };
+                list.appendChild(div);
+            });
+        }
+
+        async function toggleSkip(n) {
+            let skips = state.activeScore.skipPages || [];
+            skips = skips.includes(n) ? skips.filter(x=>x!==n) : [...skips, n];
+            await db.scores.update(state.activeScore.id, { skipPages: skips });
+            state.activeScore.skipPages = skips; 
+            renderThumbs(); 
+            render();
+        }
+
+        // --- ツールバーと補助機能 ---
+        function toggleMinimize() {
+            document.getElementById('toolbar').classList.toggle('minimized');
+            // アニメーション完了後に、新しいサイズに合わせてスナップ（最小化時は4辺へ移動）
+            setTimeout(snapToBounds, 350);
+        }
+
+        function toggleZen() {
+            const tb = document.getElementById('toolbar');
+            tb.style.opacity = '0.05';
+            tb.onmouseenter = () => tb.style.opacity = '1';
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(e => console.log(e));
+            } else if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+
+        function openModal(id) { document.getElementById(id).style.display='flex'; }
+        function closeModal(id) { document.getElementById(id).style.display='none'; }
+        
+        function showLoading(text) { 
+            document.getElementById('loading-overlay').style.display='flex'; 
+            document.getElementById('loading-text').textContent = text;
+            document.getElementById('loading-sub').textContent = '';
+        }
+        function hideLoading() { 
+            document.getElementById('loading-overlay').style.display='none'; 
+        }
+
+        // 初期化
+        init();
+    </script>
+</body>
+</html>
