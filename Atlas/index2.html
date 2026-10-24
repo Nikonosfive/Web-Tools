@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Focus Stacker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+        .canvas-container {
+            background-image: 
+                linear-gradient(45deg, #e5e7eb 25%, transparent 25%), 
+                linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #e5e7eb 75%), 
+                linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        #message-box.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-4 md:p-8">
+
+    <main class="max-w-5xl w-full mx-auto flex-grow flex flex-col gap-6">
+        
+        <!-- Header -->
+        <header class="text-center mb-4">
+            <h1 class="text-4xl font-bold text-slate-800 tracking-tight">Focus Stacker</h1>
+            <p class="text-slate-500 mt-2">Combine multiple images with varying focus into one sharp image entirely in your browser.</p>
+        </header>
+
+        <!-- Main Card -->
+        <div class="bg-white rounded-2xl shadow-xl p-6 md:p-8 flex flex-col gap-6">
+            
+            <!-- Controls -->
+            <div class="flex flex-col md:flex-row gap-4 items-end">
+                <div class="flex-grow w-full">
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Select Images (Same dimensions required)</label>
+                    <input type="file" id="fileInput" multiple accept="image/*" 
+                           class="block w-full text-sm text-slate-500
+                                  file:mr-4 file:py-2.5 file:px-4
+                                  file:rounded-lg file:border-0
+                                  file:text-sm file:font-semibold
+                                  file:bg-indigo-50 file:text-indigo-700
+                                  hover:file:bg-indigo-100 transition-colors cursor-pointer border border-slate-200 rounded-lg p-1">
+                </div>
+                <button id="processBtn" class="w-full md:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    Process Stacking
+                </button>
+            </div>
+
+            <!-- Progress Section (Hidden by default) -->
+            <div id="progressContainer" class="hidden flex flex-col gap-2">
+                <div class="flex justify-between text-sm font-medium text-slate-600">
+                    <span id="statusText">Processing...</span>
+                    <span id="progressText">0%</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                    <div id="progressBar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Output Section -->
+            <div class="flex flex-col gap-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-slate-800">Result</h2>
+                    <button id="downloadBtn" class="hidden px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-md shadow-sm transition-colors text-sm">
+                        Download Image
+                    </button>
+                </div>
+                
+                <div class="canvas-container w-full bg-slate-100 rounded-xl border border-slate-200 overflow-hidden flex items-center justify-center min-h-[400px]">
+                    <canvas id="outputCanvas" class="max-w-full h-auto object-contain"></canvas>
+                    <p id="canvasPlaceholder" class="text-slate-400 font-medium">Processed image will appear here</p>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Custom Message Box (Replacement for alert) -->
+    <div id="message-box" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 transform transition-all">
+            <h3 id="message-title" class="text-lg font-bold text-slate-900 mb-2">Notice</h3>
+            <p id="message-body" class="text-slate-600 mb-6 whitespace-pre-wrap"></p>
+            <div class="flex justify-end">
+                <button onclick="closeMessageBox()" class="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const processBtn = document.getElementById('processBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const statusText = document.getElementById('statusText');
+        const outputCanvas = document.getElementById('outputCanvas');
+        const ctx = outputCanvas.getContext('2d', { willReadFrequently: true });
+        const canvasPlaceholder = document.getElementById('canvasPlaceholder');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        // Message Box Logic
+        function showMessage(title, message) {
+            document.getElementById('message-title').innerText = title;
+            document.getElementById('message-body').innerText = message;
+            document.getElementById('message-box').classList.remove('hidden');
+        }
+
+        function closeMessageBox() {
+            document.getElementById('message-box').classList.add('hidden');
+        }
+
+        // Helper to yield to main thread (keeps UI responsive)
+        const yieldThread = () => new Promise(resolve => setTimeout(resolve, 0));
+
+        // Fast O(1) sliding window box blur for Float32Array (High-Performance Smoothing)
+        async function fastBoxBlur(data, width, height, radius) {
+            const result = new Float32Array(width * height);
+            const temp = new Float32Array(width * height);
+
+            // Horizontal pass
+            for (let y = 0; y < height; y++) {
+                if (y % 100 === 0) await yieldThread();
+                let sum = 0;
+                for (let k = -radius; k <= radius; k++) {
+                    let x = Math.max(0, Math.min(width - 1, k));
+                    sum += data[y * width + x];
+                }
+                for (let x = 0; x < width; x++) {
+                    temp[y * width + x] = sum / (2 * radius + 1);
+                    let nextX = Math.min(width - 1, x + radius + 1);
+                    let prevX = Math.max(0, x - radius);
+                    sum += data[y * width + nextX] - data[y * width + prevX];
+                }
+            }
+
+            // Vertical pass
+            for (let x = 0; x < width; x++) {
+                if (x % 100 === 0) await yieldThread();
+                let sum = 0;
+                for (let k = -radius; k <= radius; k++) {
+                    let y = Math.max(0, Math.min(height - 1, k));
+                    sum += temp[y * width + x];
+                }
+                for (let y = 0; y < height; y++) {
+                    result[y * width + x] = sum / (2 * radius + 1);
+                    let nextY = Math.min(height - 1, y + radius + 1);
+                    let prevY = Math.max(0, y - radius);
+                    sum += temp[nextY * width + x] - temp[prevY * width + x];
+                }
+            }
+            return result;
+        }
+
+        // Update progress UI
+        function updateProgress(percent, status) {
+            progressBar.style.width = `${percent}%`;
+            progressText.innerText = `${Math.round(percent)}%`;
+            if (status) statusText.innerText = status;
+        }
+
+        // Read image file as Image object
+        function loadImage(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error(`Failed to load image: ${file.name}`));
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        processBtn.addEventListener('click', async () => {
+            const files = fileInput.files;
+            if (files.length < 2) {
+                showMessage("Selection Error", "Please select at least 2 images to perform focus stacking.");
+                return;
+            }
+
+            // UI Reset
+            processBtn.disabled = true;
+            fileInput.disabled = true;
+            downloadBtn.classList.add('hidden');
+            canvasPlaceholder.classList.add('hidden');
+            progressContainer.classList.remove('hidden');
+            outputCanvas.width = 0;
+            outputCanvas.height = 0;
+            
+            try {
+                updateProgress(0, "Loading images...");
+                await yieldThread();
+
+                // 1. Load all images
+                const images = [];
+                for (let i = 0; i < files.length; i++) {
+                    images.push(await loadImage(files[i]));
+                    updateProgress((i / files.length) * 10, "Loading images...");
+                }
+
+                // Verify dimensions
+                const width = images[0].width;
+                const height = images[0].height;
+                const numPixels = width * height;
+                for (let i = 1; i < images.length; i++) {
+                    if (images[i].width !== width || images[i].height !== height) {
+                        throw new Error(`Image dimensions mismatch. All images must be exactly the same size.\nExpected: ${width}x${height}\nFound: ${images[i].width}x${images[i].height} (${files[i].name})`);
+                    }
+                }
+
+                // 1. Setup Caching & Object Pooling (Memory Optimization)
+                updateProgress(10, "Allocating memory buffers...");
+                await yieldThread();
+
+                const hiddenCanvas = document.createElement('canvas');
+                hiddenCanvas.width = width;
+                hiddenCanvas.height = height;
+                const hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true });
+
+                const imageDataCache = new Array(images.length);
+                const sharpnessCache = new Array(images.length);
+                
+                // Pooled working arrays (Reused for each image to prevent GC overhead)
+                const grayBuffer = new Float32Array(numPixels);
+                const laplacianBuffer = new Float32Array(numPixels);
+                const tempBlurBuffer = new Float32Array(numPixels);
+
+                // 2. Extract & Cache Sharpness Maps
+                for (let imgIdx = 0; imgIdx < images.length; imgIdx++) {
+                    updateProgress(10 + (imgIdx / images.length) * 40, `Analyzing focus map for image ${imgIdx + 1}/${images.length}...`);
+                    await yieldThread();
+
+                    hiddenCtx.drawImage(images[imgIdx], 0, 0);
+                    const imgData = hiddenCtx.getImageData(0, 0, width, height);
+                    imageDataCache[imgIdx] = imgData.data;
+                    sharpnessCache[imgIdx] = new Float32Array(numPixels);
+
+                    const pixels = imgData.data;
+
+                    // Convert to Grayscale (using pooled buffer)
+                    for (let i = 0; i < numPixels; i++) {
+                        const pIdx = i * 4;
+                        grayBuffer[i] = 0.299 * pixels[pIdx] + 0.587 * pixels[pIdx + 1] + 0.114 * pixels[pIdx + 2];
+                    }
+
+                    // Apply Laplacian Filter (using pooled buffer)
+                    for (let y = 1; y < height - 1; y++) {
+                        for (let x = 1; x < width - 1; x++) {
+                            const i = y * width + x;
+                            const val = 4 * grayBuffer[i] 
+                                      - grayBuffer[i - 1] 
+                                      - grayBuffer[i + 1] 
+                                      - grayBuffer[i - width] 
+                                      - grayBuffer[i + width];
+                            laplacianBuffer[i] = Math.abs(val);
+                        }
+                    }
+
+                    // Apply Fast Separable Box Blur (Region Smoothing) directly to cache
+                    const radius = 5; // Larger window for natural region detection
+                    const smoothed = sharpnessCache[imgIdx];
+                    
+                    // Horizontal pass
+                    for (let y = 0; y < height; y++) {
+                        let sum = 0;
+                        for(let i = -radius; i <= radius; i++) {
+                            sum += laplacianBuffer[y * width + Math.max(0, Math.min(width - 1, i))];
+                        }
+                        tempBlurBuffer[y * width] = sum;
+                        for (let x = 1; x < width; x++) {
+                            sum += laplacianBuffer[y * width + Math.min(width - 1, x + radius)] - 
+                                   laplacianBuffer[y * width + Math.max(0, x - radius - 1)];
+                            tempBlurBuffer[y * width + x] = sum;
+                        }
+                    }
+                    
+                    // Vertical pass
+                    for (let x = 0; x < width; x++) {
+                        let sum = 0;
+                        for(let i = -radius; i <= radius; i++) {
+                            sum += tempBlurBuffer[Math.max(0, Math.min(height - 1, i)) * width + x];
+                        }
+                        smoothed[x] = sum;
+                        for (let y = 1; y < height; y++) {
+                            sum += tempBlurBuffer[Math.min(height - 1, y + radius) * width + x] - 
+                                   tempBlurBuffer[Math.max(0, y - radius - 1) * width + x];
+                            smoothed[y * width + x] = sum;
+                        }
+                    }
+                }
+
+                // 3. High-Quality Blending (Alpha/Weighted Stacking)
+                updateProgress(60, "Blending sharpest regions...");
+                await yieldThread();
+
+                outputCanvas.width = width;
+                outputCanvas.height = height;
+                const finalImgData = ctx.createImageData(width, height);
+                const finalData = finalImgData.data;
+                const numImages = images.length;
+                const weights = new Float32Array(numImages); // Pooled weights array
+
+                // Process in chunks to prevent freezing on large images
+                const chunkSize = 50000; 
+                for (let i = 0; i < numPixels; i++) {
+                    if (i % chunkSize === 0) {
+                        updateProgress(60 + (i / numPixels) * 35, "Blending sharpest regions...");
+                        await yieldThread();
+                    }
+
+                    let totalWeight = 0;
+                    let r = 0, g = 0, b = 0;
+                    
+                    // Find max sharpness to normalize weights
+                    let maxSharp = 0;
+                    for (let j = 0; j < numImages; j++) {
+                        if (sharpnessCache[j][i] > maxSharp) maxSharp = sharpnessCache[j][i];
+                    }
+                    
+                    // Calculate exponential weights for smooth alpha blending
+                    for (let j = 0; j < numImages; j++) {
+                        let w = sharpnessCache[j][i] / (maxSharp + 0.0001); // Prevent div by zero
+                        w = Math.pow(w, 6); // High exponent isolates sharp areas while keeping boundaries soft
+                        weights[j] = w;
+                        totalWeight += w;
+                    }
+
+                    // Alpha Blend pixels based on computed weights
+                    const pIdx = i * 4;
+                    for (let j = 0; j < numImages; j++) {
+                        const weight = weights[j] / totalWeight;
+                        r += imageDataCache[j][pIdx] * weight;
+                        g += imageDataCache[j][pIdx + 1] * weight;
+                        b += imageDataCache[j][pIdx + 2] * weight;
+                    }
+
+                    finalData[pIdx] = Math.min(255, r);         // R
+                    finalData[pIdx + 1] = Math.min(255, g);     // G
+                    finalData[pIdx + 2] = Math.min(255, b);     // B
+                    finalData[pIdx + 3] = 255;                  // A (Opaque)
+                }
+
+                // 4. Draw Final Result
+                updateProgress(98, "Rendering final image...");
+                await yieldThread();
+                
+                ctx.putImageData(finalImgData, 0, 0);
+
+                // Setup Download
+                downloadBtn.classList.remove('hidden');
+                
+                updateProgress(100, "High-Quality Processing Complete!");
+
+            } catch (error) {
+                console.error(error);
+                showMessage("Processing Error", error.message);
+                canvasPlaceholder.classList.remove('hidden');
+                canvasPlaceholder.innerText = "Error during processing.";
+            } finally {
+                // Cleanup
+                processBtn.disabled = false;
+                fileInput.disabled = false;
+                setTimeout(() => {
+                    if(progressText.innerText === '100%') {
+                        progressContainer.classList.add('hidden');
+                    }
+                }, 3000);
+            }
+        });
+
+        // Download functionality
+        downloadBtn.addEventListener('click', () => {
+            const dataURL = outputCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = 'stacked_image.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+    </script>
+</body>
+</html>
