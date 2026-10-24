@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c1015">
+  <meta name="description" content="画像の位置・倍率を自動補正し、ブラウザ内で深度合成するツール。画像をサーバーへアップロードせず処理します。">
+  <title>焦点合成ラボ — Focus Stack Studio</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="焦点合成ラボ ホーム">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-copy"><strong>FOCUS<span>LAB</span></strong><small>FOCUS STACK STUDIO</small></span>
+      </a>
+      <div class="topbar-right">
+        <span class="privacy-pill"><span class="privacy-dot"></span>画像は端末内で処理</span>
+        <a class="header-link" href="#guide">使い方 <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="eyebrow-line"></span> LOCAL IMAGE PIPELINE / ENGINE 02</div>
+          <h1>Focus Stack <em>Studio</em></h1>
+          <p class="hero-desc">画像を登録し、ピント領域を解析。位置・倍率補正から深度合成までをブラウザー内で実行します。外部画像処理ライブラリの読み込みは不要です。</p>
+          <div class="hero-notes">
+            <span><i class="check-icon">✓</i> NO IMAGE UPLOAD</span>
+            <span><i class="check-icon">✓</i> NATIVE JAVASCRIPT ENGINE</span>
+            <span><i class="check-icon">✓</i> UP TO 100 FRAMES</span>
+          </div>
+        </div>
+        <div class="hero-visual" aria-label="処理パイプライン">
+          <div class="engine-header"><span>PROCESS PIPELINE</span><span class="engine-state"><i></i> ENGINE READY</span></div>
+          <div class="engine-flow">
+            <div class="engine-step"><span>01</span><strong>REGISTER</strong><small>FAST / BRIEF</small></div>
+            <span class="engine-connector">›</span>
+            <div class="engine-step"><span>02</span><strong>ANALYZE</strong><small>FOCUS MAP</small></div>
+            <span class="engine-connector">›</span>
+            <div class="engine-step"><span>03</span><strong>COMPOSITE</strong><small>TILED RENDER</small></div>
+          </div>
+          <div class="engine-footer"><span>CLIENT-SIDE COMPUTE</span><span>MEMORY-AWARE MODE <b>●</b></span></div>
+        </div>
+      </section>
+
+      <div class="workspace-heading">
+        <div>
+          <p class="section-kicker">SESSION / FOCUS STACK</p>
+          <h2>合成ワークスペース</h2>
+        </div>
+        <div class="workspace-counter"><span class="counter-number" id="imageCount">0</span><span> / 100 枚</span></div>
+      </div>
+
+      <section class="workspace-grid" aria-label="合成の設定と入力画像">
+        <div class="source-column">
+        <div class="panel source-panel">
+          <div class="panel-heading">
+            <div class="panel-title-wrap"><span class="step-number">01</span><div><h3>入力画像</h3><p>同じ被写体を異なるピント位置で撮影した画像</p></div></div>
+            <button class="text-button" id="clearAllBtn" type="button" disabled>すべて削除</button>
+          </div>
+
+          <label class="dropzone" id="dropzone" for="fileInput" tabindex="0">
+            <input id="fileInput" type="file" accept="image/*" multiple hidden>
+            <span class="upload-icon" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 21V5m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 20v5a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+            <span class="dropzone-title">画像をここにドロップ</span>
+            <span class="dropzone-subtitle">または <b>ファイルを選択</b></span>
+            <span class="format-note">JPEG・PNG・WebP など / 2〜100枚</span>
+          </label>
+          <div class="list-toolbar">
+            <span class="toolbar-label">読み込み順 <span class="muted">·</span> 上下ボタンで変更できます</span>
+            <span class="toolbar-hint">基準画像はあとから選択</span>
+          </div>
+          <div class="image-list" id="imageList" aria-live="polite">
+            <div class="empty-list"><span class="empty-icon">▧</span><p>まだ画像がありません</p><small>フォーカスブラケット撮影した画像を追加してください</small></div>
+          </div>
+          <div class="source-footnote"><span class="info-icon">i</span><span>最大100枚。画像ファイルは端末内で処理し、サーバーには送信しません。</span></div>
+        </div>
+
+        <section class="panel diagnostics-panel" aria-label="位置合わせエンジンの情報">
+          <div class="diagnostics-head">
+            <div><p class="section-kicker">ALIGNMENT ENGINE</p><h3>Registration diagnostics</h3></div>
+            <span class="engine-chip"><i></i> PURE JS</span>
+          </div>
+          <div class="diagnostics-grid">
+            <div class="diagnostic-cell"><span>FEATURE DETECTOR</span><strong>FAST-9</strong><small>Corner response</small></div>
+            <div class="diagnostic-cell"><span>DESCRIPTOR</span><strong>BRIEF / ROT</strong><small>Binary matching</small></div>
+            <div class="diagnostic-cell"><span>MODEL FIT</span><strong>RANSAC</strong><small>Similarity transform</small></div>
+            <div class="diagnostic-cell"><span>ANALYSIS SCALE</span><strong>≤ 560 PX</strong><small>Preview-only compute</small></div>
+          </div>
+          <div class="diagnostics-note"><span class="diagnostic-note-dot"></span><p>特徴点の対応が十分に得られない画像は、寸法補正へ自動フォールバックします。模様が少ない被写体や大きな視差がある素材では、結果の確認をおすすめします。</p></div>
+        </section>
+        </div>
+
+        <aside class="panel settings-panel">
+          <div class="panel-heading">
+            <div class="panel-title-wrap"><span class="step-number">02</span><div><h3>合成設定</h3><p>精度と処理負荷のバランスを調整</p></div></div>
+          </div>
+
+          <div class="setting-block">
+            <label class="field-label" for="referenceSelect">基準画像</label>
+            <select id="referenceSelect" class="select-control" disabled><option>画像を追加してください</option></select>
+            <p class="field-help">すべての画像をこの画像の画角・位置に合わせます。</p>
+          </div>
+
+          <div class="setting-divider"></div>
+
+          <div class="setting-block">
+            <div class="setting-row setting-row-top">
+              <div><label class="field-label" for="alignToggle">自動位置・倍率合わせ</label><p class="field-help">内蔵FAST / BRIEFで特徴点を照合し、移動・回転・倍率を補正</p></div>
+              <label class="switch" aria-label="自動位置・倍率合わせ"><input id="alignToggle" type="checkbox" checked><span class="switch-track"></span></label>
+            </div>
+            <div class="setting-row setting-row-top setting-row-separated">
+              <div><label class="field-label" for="cropToggle">共通範囲に自動クロップ</label><p class="field-help">全画像で重なる範囲に切り詰めます</p></div>
+              <label class="switch" aria-label="共通範囲に自動クロップ"><input id="cropToggle" type="checkbox"><span class="switch-track"></span></label>
+            </div>
+          </div>
+
+          <div class="setting-divider"></div>
+
+          <div class="setting-block">
+            <label class="field-label" for="featherSelect">境界のなじませ</label>
+            <select id="featherSelect" class="select-control">
+              <option value="16">控えめ — 細部を優先</option>
+              <option value="32" selected>標準 — バランス重視</option>
+              <option value="56">強め — 境界をなめらかに</option>
+            </select>
+            <p class="field-help">焦点領域の切り替わりをぼかして、継ぎ目を目立ちにくくします。</p>
+          </div>
+
+          <div class="setting-block setting-block-compact">
+            <label class="field-label" for="tileSize">分割サイズ</label>
+            <select id="tileSize" class="select-control">
+              <option value="512">512 px — 省メモリ</option>
+              <option value="768">768 px — 標準</option>
+              <option value="1024" selected>1024 px — 高速寄り</option>
+            </select>
+            <p class="field-help">メモリに余裕がない場合は小さいサイズを選んでください。</p>
+          </div>
+
+          <div class="setting-divider"></div>
+
+          <div class="setting-block">
+            <label class="field-label" for="outputFormat">出力形式</label>
+            <select id="outputFormat" class="select-control">
+              <option value="jpeg" selected>JPEG — 最高品質</option>
+              <option value="png">PNG — 可逆圧縮</option>
+            </select>
+            <div id="jpegQualityBlock" class="quality-setting">
+              <div class="quality-label-row"><label for="jpegQuality">JPEG品質</label><strong><span id="qualityValue">100</span><small>/ 100</small></strong></div>
+              <input id="jpegQuality" class="range-control" type="range" min="90" max="100" step="1" value="100">
+              <div class="range-ends"><span>軽いファイル</span><span>最高品質</span></div>
+            </div>
+            <p class="field-help output-note">JPEGは最終書き出し時に一度だけ圧縮します。画素数は変更しません。</p>
+          </div>
+
+          <div class="estimate-card">
+            <div class="estimate-icon">↗</div><div><strong id="estimateTitle">処理の準備ができていません</strong><p id="estimateText">画像を2枚以上追加すると、出力サイズの目安を表示します。</p></div>
+          </div>
+
+          <button class="primary-button" id="startBtn" type="button" disabled><span class="button-spark">✳</span><span>深度合成を開始</span><span class="button-arrow">→</span></button>
+          <button class="cancel-button" id="cancelBtn" type="button" hidden>処理をキャンセル</button>
+          <p class="processing-disclaimer">高解像度・多数枚では時間がかかります。処理中はこのタブを閉じないでください。</p>
+        </aside>
+      </section>
+
+      <section class="progress-panel panel" id="progressPanel" aria-live="polite" hidden>
+        <div class="progress-top"><div><span class="section-kicker">PROCESSING</span><h3 id="progressTitle">処理を準備しています…</h3></div><span class="progress-percent" id="progressPercent">0%</span></div>
+        <div class="progress-track"><span id="progressBar"></span></div>
+        <div class="progress-bottom"><span id="progressMessage">初期化中</span><span class="pulse-dot"></span><span id="progressSubMessage">ブラウザ内で処理しています</span></div>
+        <div class="progress-log" id="progressLog"></div>
+      </section>
+
+      <section class="result-panel panel" id="resultPanel" hidden>
+        <div class="result-header">
+          <div class="panel-title-wrap"><span class="step-number step-complete">03</span><div><p class="section-kicker">RESULT / ALL-IN-FOCUS</p><h2>合成結果</h2><p class="result-meta" id="resultMeta"></p></div></div>
+          <a class="download-button" id="downloadLink" href="#" download="focus-stack.jpg"><span>↓</span> 保存する</a>
+        </div>
+        <div class="result-image-wrap"><img id="resultImage" alt="深度合成のプレビュー"><div class="result-image-badge"><span class="badge-dot"></span> ALL-IN-FOCUS</div></div>
+        <div class="result-foot"><span class="result-check">✓</span><span id="resultFootText">合成が完了しました。</span><button class="text-button" id="runAgainBtn" type="button">設定を変えて再合成 ↻</button></div>
+      </section>
+
+      <section class="guide-section" id="guide">
+        <div class="guide-intro"><p class="section-kicker">WORKFLOW NOTES / IMAGE PREP</p><h2>きれいに合成するための<br>3つのポイント</h2><p>深度合成は、同じ構図でピント位置だけを変えた画像ほど良い結果になりやすい処理です。</p></div>
+        <div class="guide-cards">
+          <article class="guide-card"><span class="guide-num">01</span><h3>カメラを固定する</h3><p>三脚や固定治具を使い、撮影中の大きな移動・回転を避けてください。自動位置合わせは小さなズレを補正する機能です。</p></article>
+          <article class="guide-card"><span class="guide-num">02</span><h3>ピント位置を少しずつ変える</h3><p>手前から奥まで少しずつピントを送ると、各領域で鮮明な画像が見つかりやすくなります。露出や照明は一定に保つのがおすすめです。</p></article>
+          <article class="guide-card"><span class="guide-num">03</span><h3>まずはJPEG最高品質かPNG</h3><p>JPEGは容量を抑えやすく、PNGは合成後の画素を可逆で保存できます。後編集や品質優先ならPNGを選んでください。</p></article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer"><div class="brand brand-footer"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span class="brand-copy"><strong>FOCUS<span>LAB</span></strong><small>FOCUS STACK STUDIO</small></span></div><p>ブラウザー内で処理する深度合成ツール。出力結果を確認し、元画像も保管してください。</p><span class="footer-version">NATIVE JS ENGINE / 2.0</span></footer>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
